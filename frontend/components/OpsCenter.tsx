@@ -5,21 +5,27 @@ import { useEffect, useState } from "react";
 type Tx = { hash: string; from: string; to: string | null; value_eth: number; score: number; flags: string[]; alert: boolean };
 type Feed = { latest: number; n_txs: number; n_alerts: number; txs: Tx[] };
 
-const T0 = Date.now();
-
-/** Reloj de sala 24/7. */
+/** Reloj de sala 24/7. Solo en cliente: el servidor renderiza un placeholder estable. */
 function useRoomClock() {
-  const [now, setNow] = useState(() => Date.now());
+  const [state, setState] = useState<{ time: string; mountedAt: number | null }>({
+    time: "--:--:--",
+    mountedAt: null,
+  });
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const started = Date.now();
+    const tick = () => {
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setState({
+        time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+        mountedAt: started,
+      });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
-  const d = new Date(now);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return {
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
-    up: now - T0,
-  };
+  return state;
 }
 
 type Station = {
@@ -259,8 +265,14 @@ function WallBoard({ feed }: { feed: Feed | null }) {
 
 export function OpsCenter() {
   const [feed, setFeed] = useState<Feed | null>(null);
-  const { time, up } = useRoomClock();
-  const mins = Math.floor(up / 60000);
+  const { time, mountedAt } = useRoomClock();
+  const session =
+    mountedAt === null
+      ? "sesión activa"
+      : (() => {
+          const mins = Math.floor((Date.now() - mountedAt) / 60000);
+          return mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h`;
+        })();
 
   useEffect(() => {
     let alive = true;
@@ -307,7 +319,7 @@ export function OpsCenter() {
         </span>
         <span className="umb-brand">ChainMind</span>
         <span className="umb-clock">
-          {time} · {mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h`}
+          {time} · {session}
         </span>
       </div>
     </div>
