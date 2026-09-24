@@ -168,7 +168,7 @@ def test_flags_en_lenguaje_claro(vault):
           "flags": ["outlier_140x_mediana", "payload_grande"], "hash": "0xabc123", "block": 3}
     obsidian.sync_alert(tx)
     text = (vault / "ChainMind" / "alerts" / "0xabc123.md").read_text(encoding="utf-8")
-    body = text.split(obsidian.END, 1)[1]
+    body = text.split(obsidian.START, 1)[1].split(obsidian.END, 1)[0]
     assert "140× la mediana" in body
     assert "payload grande" in body
     assert "outlier_140x_mediana" not in body
