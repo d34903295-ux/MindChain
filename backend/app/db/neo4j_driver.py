@@ -6,9 +6,24 @@ USER = os.getenv("NEO4J_USER", "neo4j")
 PASSWORD = os.getenv("NEO4J_PASSWORD", "chainmind_dev")
 
 _driver = None
-
 def get_driver():
     global _driver
     if _driver is None:
         _driver = GraphDatabase.driver(URI, auth=(USER, PASSWORD))
     return _driver
+
+def save_wallet_graph(address: str, profile: dict, txs: list[dict], score: int):
+    d = get_driver()
+    with d.session() as s:
+        s.run("MERGE (w:Wallet {address:$a, chain:'ethereum'}) SET w.riskScore=$s, w.txCount=$n",
+              a=address.lower(), s=int(score), n=int(profile.get("tx_count") or 0))
+        for t in (txs or [])[:25]:
+            if not t.get("hash"): continue
+            s.run("""MERGE (t:Transaction {hash:$h, chain:'ethereum'})
+                     SET t.valueUsd=$v
+                     MERGE (a:Wallet {address:$f, chain:'ethereum'})
+                     MERGE (b:Wallet {address:$t2, chain:'ethereum'})
+                     MERGE (a)-[:SENT]->(t)-[:TO]->(b)""",
+                  h=t["hash"], v=float(t.get("value_usd") or 0),
+                  f=str(t.get("from") or address).lower(),
+                  t2=str(t.get("to") or address).lower())

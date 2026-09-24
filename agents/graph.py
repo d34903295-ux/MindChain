@@ -1,4 +1,4 @@
-"""Orquestación LangGraph Fase 0/1: profile -> score -> explain."""
+"""Orquestación LangGraph: profile -> score -> explain."""
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
 from .wallet_intelligence import profile_wallet
@@ -9,7 +9,7 @@ class State(TypedDict, total=False):
     address: str; txs: list; profile: dict; risk_score: int; risk_factors: list; explanation: str
 
 def n_profile(s: State) -> State:
-    s["profile"] = profile_wallet(s["address"], s.get("txs", []))
+    s["profile"] = profile_wallet(s["address"], s.get("txs", []), s.get("profile_raw"))
     return s
 
 def n_score(s: State) -> State:
