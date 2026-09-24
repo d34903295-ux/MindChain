@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+node_modules/
+.next/
+dist/
+build/
+.neptune/
+pgdata/
+neo4j_data/
+*.log
+.DS_Store

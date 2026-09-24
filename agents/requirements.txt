@@ -1,0 +1,7 @@
+langgraph==0.2.*
+langchain-core==0.3.*
+pydantic==2.9.*
+neo4j==5.22.*
+psycopg[binary]==3.1.*
+scikit-learn==1.5.*
+pytest==8.3.*

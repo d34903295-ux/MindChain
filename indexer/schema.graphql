@@ -1,0 +1,12 @@
+type Transaction @entity {
+  id: ID!
+  hash: String! @unique
+  blockNumber: Int!
+  blockTime: DateTime!
+  from: String!
+  to: String
+  value: BigInt!
+  gasUsed: BigInt
+  gasPrice: BigInt
+  chain: String!
+}

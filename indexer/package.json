@@ -1,0 +1,7 @@
+{
+  "name": "chainmind-indexer",
+  "version": "0.1.0",
+  "scripts": { "build": "tsc", "start": "node lib/main.js", "migrate": "sqd db migrate" },
+  "dependencies": { "@subsquid/evm-processor": "latest", "@subsquid/typeorm-store": "latest", "typeorm": "latest", "pg": "latest" },
+  "devDependencies": { "typescript": "5.*" }
+}

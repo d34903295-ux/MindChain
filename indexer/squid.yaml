@@ -1,0 +1,30 @@
+manifestVersion: subsquid.io/v1
+name: chainmind-eth
+version: 1
+description: ChainMind Fase 0 — Ethereum mainnet EVM (plantilla Subsquid)
+deploy:
+  addons:
+    postgres: {}
+processor:
+  constructor: EvmBatchProcessor
+  dataSource:
+    archive: ${SQD_GATEWAY:https://v2.archive.subsquid.io/network/ethereum-mainnet}
+    chain: ${RPC_ETH_HTTP:https://eth.llamarpc.com}
+  finalityConfirmation: 75
+  fields:
+    transaction:
+      - block.number
+      - block.timestamp
+      - hash
+      - from
+      - to
+      - value
+      - gasUsed
+      - gasPrice
+  includeAllBlocks: false
+query:
+  - field: transaction
+    includeAllBlocks: false
+store:
+  type: typeorm
+  migrations: db/migrations
