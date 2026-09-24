@@ -16,7 +16,7 @@ app.include_router(qr_router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "fase": 4}
+    return {"status": "ok", "fase": 5}
 
 @app.get("/")
 def root():
