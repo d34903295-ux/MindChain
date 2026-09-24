@@ -2,8 +2,32 @@
 ethereum -> Blockchair (+fallback RPC). base -> Blockscout v2 (+fallback RPC).
 Timeout global acotado para criterio <10s.
 """
-import os, json, urllib.request
+import os, json, time, threading, urllib.request
 from .chains import get_chain, chain_key, rpc_list
+from .price import get_price_usd
+
+CACHE_TTL = int(os.getenv("CHAINMIND_FETCH_TTL", "20"))
+_cache: dict[str, tuple[float, dict]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_get(key: str):
+    with _cache_lock:
+        hit = _cache.get(key)
+    if hit and time.time() - hit[0] < CACHE_TTL:
+        return hit[1]
+    return None
+
+
+def _cache_put(key: str, value: dict):
+    with _cache_lock:
+        _cache[key] = (time.time(), value)
+    return value
+
+
+def cache_stats() -> dict:
+    with _cache_lock:
+        return {"entries": len(_cache), "ttl_s": CACHE_TTL}
 
 def _http_json(url, payload=None, timeout=8):
     data = json.dumps(payload).encode() if payload is not None else None
@@ -70,54 +94,130 @@ def fetch_blockscout(base_url, address, limit=25):
         n_count = int(counters.get("transactions_count") or 0)
     except Exception:
         n_count = 0
+    # El endpoint /counters de Blockscout es inconsistente: el mismo contrato
+    # devolvió 2, 9, 43 y 984 en distintas llamadas. No propagamos ese número:
+    # el perfil muestra "n/d" y los heurísticos que dependen del histórico se
+    # desactivan. La muestra de transacciones sí es real y se sigue usando.
     raw = {"type": "contract" if info.get("is_contract") else "account",
            "balance": str(coin), "balance_usd": 0.0,
-           "transaction_count": max(n_count, len(items)),
+           "transaction_count": None,
+           "tx_count_reliable": False,
+           "counter_raw": n_count,
            "is_verified": bool(info.get("is_verified")),
            "name": info.get("name") or "",
            "token_symbol": (info.get("token") or {}).get("symbol", "") if isinstance(info.get("token"), dict) else ""}
     return raw, items
 
-def fetch_wallet_data(address, chain="ethereum", limit=25):
+def fetch_wallet_data(address, chain="ethereum", limit=25, use_cache=True):
     key = chain_key(chain)
     cfg = get_chain(key)
     rpcs = rpc_list(key)
     adapter = cfg.get("adapter", "rpc")
+    cache_key = f"wallet:{key}:{address.lower()}:{limit}"
+    if use_cache:
+        hit = _cache_get(cache_key)
+        if hit is not None:
+            return {**hit, "cached": True}
+
+    result = None
     if adapter == "blockchair":
         try:
             raw, calls = fetch_blockchair(cfg["blockchair_slug"], address, limit)
-            return {"raw_address": raw, "calls": calls, "rpc": {}, "source": "blockchair", "chain": key}
+            result = {"raw_address": raw, "calls": calls, "rpc": {}, "source": "blockchair", "chain": key}
         except Exception:
             pass
     elif adapter == "blockscout":
         try:
             raw, calls = fetch_blockscout(cfg["blockscout"], address, limit)
-            return {"raw_address": raw, "calls": calls, "rpc": {}, "source": "blockscout", "chain": key}
+            result = {"raw_address": raw, "calls": calls, "rpc": {}, "source": "blockscout", "chain": key}
         except Exception:
             pass
-    snap = rpc_snapshot(rpcs, address)
-    code = snap.get("code", "0x")
-    raw = {"type": "contract" if isinstance(code, str) and len(code) > 4 else "account",
-           "balance": str(snap.get("balance_wei", 0)),
-           "transaction_count": int(snap.get("tx_count", 0))}
-    return {"raw_address": raw, "calls": [], "rpc": snap, "source": "rpc-fallback", "chain": key}
+
+    if result is None:
+        snap = rpc_snapshot(rpcs, address)
+        code = snap.get("code", "0x")
+        raw = {"type": "contract" if isinstance(code, str) and len(code) > 4 else "account",
+               "balance": str(snap.get("balance_wei", 0)),
+               "transaction_count": int(snap.get("tx_count", 0))}
+        result = {"raw_address": raw, "calls": [], "rpc": snap, "source": "rpc-fallback", "chain": key}
+
+    result["cached"] = False
+    return _cache_put(cache_key, result)
+
+WEI = 10 ** 18
+
+
+def _hex_to_int(v, default: int = 0) -> int:
+    """Convierte a int aceptando: int, '0x10' o hex sin prefijo (Blockscout: 'ff').
+
+    Blockchair devuelve int; Blockscout devuelve hex sin prefijo. Por eso una
+    cadena sin '0x' se interpreta como hex: es el único formato posible ahí.
+    """
+    if v is None:
+        return default
+    if isinstance(v, int):
+        return v
+    s = str(v).strip()
+    if not s:
+        return default
+    try:
+        if s.lower().startswith("0x"):
+            return int(s, 16)
+    except ValueError:
+        return default
+    try:
+        return int(s, 16)  # hex sin prefijo
+    except ValueError:
+        pass
+    try:
+        return int(float(s))
+    except ValueError:
+        return default
+
 
 def normalize_txs(address, calls):
-    txs = []
+    """Normaliza llamadas de cualquier adapter a un esquema común.
+
+    - Blockchair: value ya en wei (int), value_usd en USD
+    - Blockscout: value en wei HEX, sin value_usd -> se calcula con precio cacheado
+    """
+    price = get_price_usd()
+    out = []
     for c in calls or []:
+        if not isinstance(c, dict):
+            continue
         if "transaction_hash" in c:
-            txs.append({"hash": c.get("transaction_hash", ""),
-                        "from": (c.get("sender") or "").lower(),
-                        "to": (c.get("recipient") or "").lower() if c.get("recipient") else None,
-                        "value_wei": c.get("value", 0), "value_usd": c.get("value_usd", 0),
-                        "time": c.get("time", ""), "block": c.get("block_id")})
+            wei = _hex_to_int(c.get("value"))
+            usd = c.get("value_usd")
+            eth = wei / WEI
+            if usd is None and price:
+                usd = eth * price
+            out.append({
+                "hash": c.get("transaction_hash", ""),
+                "from": (c.get("sender") or "").lower(),
+                "to": (c.get("recipient") or "").lower() if c.get("recipient") else None,
+                "value_wei": str(wei),
+                "value_eth": round(eth, 8),
+                "value_usd": round(float(usd), 2) if usd is not None else None,
+                "time": c.get("time", ""),
+                "block": c.get("block_id"),
+            })
         else:
             f = c.get("from")
             t = c.get("to")
             f = (f.get("hash") if isinstance(f, dict) else f) or ""
             t = (t.get("hash") if isinstance(t, dict) else t) or ""
-            txs.append({"hash": c.get("hash", ""), "from": str(f).lower(),
-                        "to": str(t).lower() if t else None,
-                        "value_wei": c.get("value", 0), "value_usd": 0,
-                        "time": c.get("timestamp", ""), "block": c.get("block_number")})
-    return txs
+            wei = _hex_to_int(c.get("value"))
+            eth = wei / WEI
+            usd = eth * price if price else None
+            out.append({
+                "hash": c.get("hash", ""),
+                "from": str(f).lower(),
+                "to": str(t).lower() if t else None,
+                "value_wei": str(wei),
+                "value_eth": round(eth, 8),
+                "value_usd": round(usd, 2) if usd is not None else None,
+                "time": c.get("timestamp", ""),
+                "block": c.get("block_number"),
+            })
+    return out

@@ -15,7 +15,7 @@ type Report = {
 };
 
 function str(v: unknown): string {
-  if (v === null || v === undefined) return "—";
+  if (v === null || v === undefined) return "n/d";
   if (Array.isArray(v)) return v.join(", ") || "—";
   return String(v);
 }
@@ -150,6 +150,12 @@ export default function WalletPage() {
           </div>
 
           <h3>Perfil</h3>
+          {res.profile.tx_count_reliable === false && (
+            <p className="data-warning">
+              El histórico de transacciones no es fiable en esta fuente: las métricas de
+              frecuencia y antigüedad se omiten en lugar de estimar.
+            </p>
+          )}
           <dl className="stat-grid">
             <Stat term="Txs lifetime">{str(res.profile.tx_count)}</Stat>
             <Stat term="Antigüedad (días)">{str(res.profile.age_days)}</Stat>
@@ -157,7 +163,9 @@ export default function WalletPage() {
             <Stat term="Frec. tx/día">{str(res.profile.freq_tx_day)}</Stat>
             <Stat term="Balance USD">${Number(res.profile.balance_usd || 0).toLocaleString("es")}</Stat>
             <Stat term="Contrapartes (muestra)">{str(res.profile.counterparties_sample)}</Stat>
-            <Stat term="Bot-like">{str(res.profile.bot_like)}</Stat>
+            <Stat term="Muestra">
+              {str(res.profile.sample_size)} · {str(res.profile.sample_confidence)}
+            </Stat>
             <Stat term="Etiquetas">{str(res.profile.labels)}</Stat>
           </dl>
 

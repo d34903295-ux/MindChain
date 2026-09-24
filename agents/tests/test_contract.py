@@ -1,4 +1,4 @@
-from agents.contract_analyzer import analyze_source, analyze_bytecode, analyze_contract, disassemble, parse_slither_json, delegation_7702, valid_code
+from agents.contract_analyzer import analyze_source, analyze_bytecode, analyze_contract, disassemble, parse_slither_json, delegation_7702, valid_code, detect_proxy, is_proxy, _unflatten_source
 
 RISKY = "contract T { address owner; modifier onlyOwner { _; } function mint(uint n) public onlyOwner {} function withdraw() public onlyOwner {} function pause() public onlyOwner { paused = true; } function setBlacklist(address a) public { blacklist[a] = true; } function kill() public { selfdestruct(payable(owner)); } function fwd(address t, bytes memory d) public { t.delegatecall(d); } if (tx.origin != msg.sender) {} }"
 SAFE = "contract T { mapping(address=>uint) b; function transfer(address to, uint n) public { b[msg.sender] -= n; b[to] += n; } }"
@@ -46,3 +46,46 @@ def test_slither_parser():
                                    {"check": "nuevo-check", "impact": "Low", "description": "y"}]}}
     f = parse_slither_json(d)
     assert f[0]["weight"] == 30 and f[1]["weight"] == 5
+
+
+def test_proxy_por_fuente_verificada():
+    src = "contract Proxy is TransparentUpgradeableProxy { function upgrade() public {} }"
+    assert is_proxy(src) is True
+    proxy, method = detect_proxy(src, "0x6001")
+    assert proxy is True and method == "source-verificada"
+
+
+def test_proxy_por_bytecode_eip1967():
+    slot = "360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+    proxy, method = detect_proxy(None, "0x" + slot)
+    assert proxy is True and method == "bytecode-eip1967"
+
+
+def test_sin_prueba_no_se_afirma_proxy():
+    """USDC usa slot propio: sin fuente no se puede afirmar. Honestidad > certeza."""
+    proxy, method = detect_proxy(None, "0x6080604052f4")
+    assert proxy is False and "no-detectado" in method
+
+
+def test_analyze_no_penaliza_proxy():
+    src = "contract Proxy is TransparentUpgradeableProxy { function upgrade() public { address.delegatecall(msg.data); } }"
+    r = analyze_contract("0xabc", {"is_contract": True, "code": "0x6001", "verified": True,
+                                   "verified_via": "test", "code_size_bytes": 2, "source": src,
+                                   "source_origin": "test"})
+    ids = [x["id"] for x in r["risks"]]
+    assert "proxy_detectado" in ids
+    assert "delegatecall" not in ids and "bytecode_delegatecall" not in ids
+    assert r["risk_score"] <= 5
+
+
+def test_slither_multi_archivo(tmp_path):
+    payload = """{"language":"Solidity","sources":{"contracts/A.sol":{"content":"contract A {}"},"contracts/B.sol":{"content":"contract B {}"}},"settings":{"compilationTarget":{"contracts/A.sol":"A"}}}"""
+    written = _unflatten_source(payload, str(tmp_path))
+    assert len(written) == 2
+    assert written[0].endswith("A.sol")  # el compilationTarget va primero
+    assert (tmp_path / "contracts" / "B.sol").exists()
+
+
+def test_slither_fuente_plana(tmp_path):
+    written = _unflatten_source("contract A {}", str(tmp_path))
+    assert len(written) == 1 and written[0].endswith("target.sol")

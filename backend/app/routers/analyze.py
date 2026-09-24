@@ -43,4 +43,5 @@ def analyze_wallet(payload: AnalyzeRequest):
     alert = alert_if_risky("wallet", payload.address, payload.chain.lower(), score, factors)
     return {"address": payload.address, "chain": payload.chain.lower(), "profile": profile,
             "risk_score": score, "risk_factors": factors, "explanation": text,
-            "elapsed_s": elapsed, "source": fetched.get("source"), "alert": alert}
+            "elapsed_s": elapsed, "source": fetched.get("source"),
+            "cached": bool(fetched.get("cached")), "alert": alert}

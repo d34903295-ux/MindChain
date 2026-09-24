@@ -649,6 +649,17 @@ img {
   color: var(--muted);
 }
 
+.data-warning {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-inline-start: 3px solid var(--warn);
+  border-radius: var(--r-sm);
+  padding: 0.7rem 0.9rem;
+  color: var(--text-soft);
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem;
+}
+
 /* ---------- Bloque de resultado (wallet / contrato) ---------- */
 .result-enter { animation: page-in 380ms var(--ease) both; }
 .result-head {

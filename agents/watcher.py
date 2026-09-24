@@ -8,14 +8,17 @@ from collections import deque, defaultdict
 
 from .chains import get_chain, chain_key, rpc_list
 from .fetcher import _http_json
-from .risk_scoring import MIXERS
+from . import watchlist
 
 WEI = 10 ** 18
 ALERT_SCORE = 50
 MAX_BLOCKS = 3
+MIN_MEDIAN_SAMPLES = 30
 
 # mediana móvil por cadena con los últimos valores vistos
-_windows: dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
+_windows: dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+# hashes ya alertados (evita duplicar alertas entre polls)
+_alerted: dict[str, set] = defaultdict(set)
 
 
 def _rpc(chain: str, method: str, params: list, timeout: int = 8):
@@ -62,24 +65,41 @@ def norm_tx(t: dict, block: int | None = None) -> dict:
 
 
 def analyze_tx(tx: dict, median_eth: float | None) -> tuple[int, list[str]]:
+    """Score heurístico por transacción. Solo escala a alerta con evidencia clara."""
     flags: list[str] = []
     score = 0
-    if tx["from"] in MIXERS or (tx["to"] or "") in MIXERS:
+    wl = watchlist.get(tx["from"]) or watchlist.get(tx["to"] or "")
+    if wl:
         score += 60
-        flags.append("mezclador_conocido")
+        flags.append("watchlist:" + wl)
     v = tx["value_eth"]
-    if v >= 100:
-        score += 25
+    if v >= 1_000:
+        # movimientos de 6 cifras en ETH: deben cruzar el umbral de alerta solos
+        score += 60
+        flags.append("ballena_1000eth+")
+    elif v >= 100:
+        score += 30
         flags.append("ballena_100eth+")
-    elif median_eth and median_eth > 0 and v >= 1 and v >= 20 * median_eth:
-        score += 20
-        flags.append(f"outlier_20x_mediana({median_eth:.4f})")
+    if median_eth and median_eth > 0 and v >= 1:
+        ratio = v / median_eth
+        if ratio >= 100:
+            score += 25
+            flags.append(f"outlier_{int(ratio)}x_mediana")
+        elif ratio >= 20:
+            score += 15
+            flags.append(f"outlier_{int(ratio)}x_mediana")
     if tx["to"] is None:
         score += 5
         flags.append("creacion_contrato")
-    if tx["gas_price_gwei"] >= 200:
-        score += 10
+    if tx["gas_price_gwei"] >= 300:
+        score += 12
+        flags.append("gas_muy_alto")
+    elif tx["gas_price_gwei"] >= 150:
+        score += 6
         flags.append("gas_alto")
+    if tx["input_len"] >= 1_000:
+        score += 5
+        flags.append("payload_grande")
     return min(score, 100), flags
 
 
@@ -113,20 +133,38 @@ def scan(chain: str = "ethereum", since: int | None = None, max_blocks: int = 2)
                 continue
     win = _windows[key]
     out = []
+    med = statistics.median(win) if len(win) >= MIN_MEDIAN_SAMPLES else None
+    seen_in_batch = set()
     for tx in txs:
-        med = statistics.median(win) if len(win) >= 10 else None
+        h = tx.get("hash")
+        if h and h in seen_in_batch:
+            continue
+        if h:
+            seen_in_batch.add(h)
         score, flags = analyze_tx(tx, med)
         if tx["value_eth"] > 0:
             win.append(tx["value_eth"])
         out.append({**tx, "score": score, "flags": flags, "alert": score >= ALERT_SCORE})
     out.sort(key=lambda x: -x["score"])
+    # conserva hashes vistos para no re-alertar en el siguiente poll
+    newly_alerted = []
+    alerted = _alerted[key]
+    for t in out:
+        if t["alert"] and t["hash"] not in alerted:
+            newly_alerted.append(t)
+            alerted.add(t["hash"])
+        if len(alerted) > 2000:
+            alerted.clear()
     return {
         "chain": key,
         "latest": latest,
         "blocks": blocks,
         "txs": out,
         "alerts": [t for t in out if t["alert"]],
+        "new_alerts": newly_alerted,
         "n_txs": len(out),
         "n_alerts": sum(1 for t in out if t["alert"]),
+        "n_new_alerts": len(newly_alerted),
+        "median_eth": round(med, 6) if med else None,
         "elapsed_s": round(time.time() - t0, 2),
     }

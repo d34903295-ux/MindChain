@@ -1,4 +1,4 @@
-import sys, pathlib
+import sys, pathlib, re
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 
@@ -15,9 +15,22 @@ from agents.report_agent import build_case_markdown
 
 router = APIRouter()
 
+ADDR_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
+BURN = {"0x" + "0" * 40, "0x" + "d" * 40}
+
+
+def _validate_address(address: str) -> str:
+    if not isinstance(address, str) or not ADDR_RE.match(address):
+        raise HTTPException(status_code=400, detail="dirección inválida: se espera 0x + 40 caracteres hex")
+    low = address.lower()
+    if low in BURN:
+        raise HTTPException(status_code=400, detail="esa dirección no tiene historial (null/burn)")
+    return low
+
+
 @router.post("/investigate")
 def investigate(payload: dict):
-    address = str(payload.get("address", ""))
+    address = _validate_address(str(payload.get("address", "")))
     depth = int(payload.get("max_depth", 3))
     direction = str(payload.get("direction", "both"))
     chain = str(payload.get("chain", "ethereum"))
@@ -37,6 +50,7 @@ def investigate(payload: dict):
 
 @router.get("/report/{address}")
 def report(address: str, max_depth: int = 3, chain: str = "ethereum"):
+    address = _validate_address(address)
     try:
         get_chain(chain)
     except ValueError as e:

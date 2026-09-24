@@ -107,7 +107,7 @@ def fetch_contract(address, chain="ethereum"):
             "source": source, "source_origin": sorigin, "chain": key}
 
 SOURCE_CHECKS = [
-    ("selfdestruct", 30, ["selfdestruct"], "any", "SELFDESTRUCT: el owner puede destruir el contrato y mover fondos"),
+    ("selfdestruct", 30, ["selfdestruct", "suicide"], "any", "SELFDESTRUCT: el owner puede destruir el contrato y mover fondos"),
     ("delegatecall", 25, ["delegatecall"], "any", "DELEGATECALL: lógica delegada, riesgo de takeover si el destino es mutable"),
     ("tx_origin", 15, ["tx.origin"], "any", "tx.origin en autorización: phishing de firmas"),
     ("owner_mint", 20, ["function mint", "onlyowner"], "all", "Mint privilegiado: el owner puede inflar el supply"),
@@ -117,6 +117,51 @@ SOURCE_CHECKS = [
     ("upgradeable", 15, ["upgradeable", "uupsupgradeable", "erc1967", "transparentupgradeableproxy"], "any", "Upgradeable/proxy: la lógica puede cambiar tras el deploy"),
     ("owner_admin", 5, ["ownable", "onlyowner"], "any", "Administrado por owner/EOA: poder centralizado"),
 ]
+
+# Tokens que son proxies por diseño (no son un hallazgo de riesgo por sí mismos).
+PROXY_MARKERS = (
+    "transparentupgradeableproxy",
+    "erc1967proxy",
+    "proxyadmin",
+    "beaconproxy",
+    "upgradeableproxy",
+    "initializer",
+)
+
+
+def is_proxy(source: str | None) -> bool:
+    if not source:
+        return False
+    low = source.lower()
+    return any(m in low for m in PROXY_MARKERS) and "proxy" in low
+
+
+def detect_implementation_slot(rpc_code: str) -> str | None:
+    """Lee el slot EIP-1967 de implementación si el runtime lo referencia."""
+    if not rpc_code or "363d3d373d3d3d363d73" not in rpc_code.lower():
+        return None
+    return "eip1967-implementation-referenced"
+
+
+EIP1967_IMPL_SLOT = "360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+
+
+def detect_proxy(source: str | None, code: str | None) -> tuple[bool, str]:
+    """Detección de proxy con nivel de honestidad explícito.
+
+    Devuelve (es_proxy, metodo). La fuente verificada es la señal fuerte; el
+    bytecode solo confirma si aparecen los marcadores estándar EIP-1967.
+    Muchos proxies (p.ej. FiatTokenProxy de USDC) usan slots propios y NO son
+    detectables sin fuente verificada: en ese caso no se afirma nada.
+    """
+    if is_proxy(source):
+        return True, "source-verificada"
+    low = (code or "").lower()
+    if EIP1967_IMPL_SLOT in low:
+        return True, "bytecode-eip1967"
+    if "363d3d373d3d3d363d73" in low:
+        return True, "bytecode-patron-proxy"
+    return False, "no-detectado-sin-fuente"
 
 def analyze_source(source):
     findings = []
@@ -184,22 +229,68 @@ def parse_slither_json(data):
     return out
 
 def try_slither(source):
+    """Ejecuta Slither sobre el código fuente.
+
+    Etherscan devuelve en `SourceCode` el JSON de archivos verificados cuando el
+    contrato tiene imports. Antes se escribía todo en un .sol y Slither fallaba
+    siempre. Ahora se reconstruye el proyecto multi-archivo.
+    """
     if os.getenv("CHAINMIND_SLITHER", "") != "1":
         return [], False
     if not source or shutil.which("slither") is None:
         return [], False
     try:
         with tempfile.TemporaryDirectory() as td:
-            sol = tempfile.os.path.join(td, "target.sol")
-            out = tempfile.os.path.join(td, "out.json")
-            with open(sol, "w", encoding="utf-8") as f:
-                f.write(source)
-            subprocess.run(["slither", sol, "--json", out], capture_output=True, timeout=90)
+            files = _unflatten_source(source, td)
+            if not files:
+                return [], False
+            entry = files[0]
+            out = os.path.join(td, "out.json")
+            proc = subprocess.run(
+                ["slither", entry, "--json", out, "--solc-remaps", "@openzeppelin/=node_modules/@openzeppelin/"],
+                capture_output=True,
+                timeout=120,
+            )
+            if not os.path.exists(out):
+                # Slither no produjo JSON: la fuente no compila tal cual
+                return [], False
             with open(out, encoding="utf-8") as f:
-                return parse_slither_json(json.load(f)), True
+                findings = parse_slither_json(json.load(f))
+            return findings, True
     except Exception:
         return [], False
     return [], False
+
+
+def _unflatten_source(source: str, target_dir: str) -> list[str]:
+    """Escribe los archivos de un SourceCode de Etherscan. Devuelve rutas en orden."""
+    text = source.strip()
+    data = None
+    if text.startswith("{"):
+        try:
+            data = json.loads(text)
+        except Exception:
+            data = None
+    written: list[str] = []
+    if isinstance(data, dict) and isinstance(data.get("sources"), dict):
+        for name, body in data["sources"].items():
+            safe = name.replace("..", "_").replace("\\", "/").lstrip("/")
+            path = os.path.join(target_dir, *safe.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            content = body.get("content") if isinstance(body, dict) else str(body)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content or "")
+            written.append(path)
+        settings = data.get("settings") or {}
+        compiler = (settings.get("compilationTarget") or {}).get("")
+        if compiler:
+            written.sort(key=lambda p: 0 if os.path.basename(p) == os.path.basename(compiler) else 1)
+    else:
+        path = os.path.join(target_dir, "target.sol")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        written.append(path)
+    return written
 
 def analyze_contract(address, fetched):
     if fetched.get("account_type") == "eoa_7702":
@@ -218,16 +309,38 @@ def analyze_contract(address, fetched):
                 "permissions": ["eoa-sin-codigo"], "risks": [], "risk_score": 0,
                 "explanation": "La dirección no tiene bytecode: es una EOA, no un contrato.",
                 "slither_used": False, "source_origin": fetched.get("source_origin")}
-    findings = analyze_source(fetched.get("source"))
-    findings += analyze_bytecode(fetched.get("code", ""))
-    slither_findings, used = try_slither(fetched.get("source"))
+    source = fetched.get("source")
+    code = fetched.get("code", "")
+    proxy, proxy_method = detect_proxy(source, code)
+    slot = detect_implementation_slot(code)
+    findings = analyze_source(source)
+    findings += analyze_bytecode(code)
+    slither_findings, used = try_slither(source)
     findings += slither_findings
+    if proxy:
+        # un proxy delega por diseño: DELEGATECALL no es un hallazgo en sí mismo
+        findings = [
+            f for f in findings
+            if f["id"] not in ("delegatecall", "bytecode_delegatecall", "upgradeable")
+        ]
+        findings.append({
+            "id": "proxy_detectado",
+            "weight": 5,
+            "origin": "meta",
+            "message": "El contrato es un proxy (" + proxy_method + "): delega la lógica a una implementación"
+                       + (f" ({slot})" if slot else "") + ". Audita la implementación, no el proxy.",
+        })
+    else:
+        for f in findings:
+            if f["id"] in ("delegatecall", "bytecode_delegatecall"):
+                f["message"] += " (patrón típico de proxy; sin fuente verificada no se puede confirmar)"
     if not fetched.get("verified"):
         findings.append({"id": "no_verificado", "weight": 10,
                          "message": "Contrato no verificado en Sourcify: el bytecode no es auditable públicamente",
                          "origin": "meta"})
     score = min(100, sum(f.get("weight", 0) for f in findings))
     perms = sorted(set(f["id"] for f in findings if f["origin"] in ("source", "bytecode")))
+    perms.append("proxy") if proxy else None
     lvl = "bajo" if score < 30 else ("medio" if score < 70 else "alto")
     expl = ("Contrato " + address + ": bytecode de " + str(fetched.get("code_size_bytes")) + " bytes, "
             + ("verificado" if fetched.get("verified") else "NO verificado") + " (" + str(fetched.get("verified_via")) + "). "
@@ -235,5 +348,6 @@ def analyze_contract(address, fetched):
             + ("Hallazgos: " + "; ".join(f["id"] + " (" + str(f["weight"]) + ")" for f in findings) + "." if findings else "Sin permisos peligrosos detectados."))
     return {"address": address, "is_contract": True, "account_type": "contract", "verified": fetched.get("verified"),
             "verified_via": fetched.get("verified_via"), "code_size_bytes": fetched.get("code_size_bytes"),
-            "permissions": perms, "risks": findings, "risk_score": score, "explanation": expl,
+            "is_proxy": proxy, "proxy_detection": proxy_method, "permissions": perms, "risks": findings,
+            "risk_score": score, "explanation": expl,
             "slither_used": used, "source_origin": fetched.get("source_origin")}

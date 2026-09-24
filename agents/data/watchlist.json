@@ -1,0 +1,4 @@
+{
+  "_comment": "Direcciones sensibles verificadas on-chain. Añade SOLO direcciones confirmadas: ejecuta `python scripts/verify_watchlist.py` para comprobar que tienen bytecode. Etiqueta = origen documentado. Vacío por defecto para no generar falsos positivos.",
+  "addresses": []
+}
