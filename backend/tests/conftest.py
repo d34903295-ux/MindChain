@@ -24,3 +24,11 @@ CREDENCIALES_IA = (
 for _var in CREDENCIALES_IA:
     os.environ.pop(_var, None)
 os.environ["CHAINMIND_LLM_DISABLED"] = "1"
+# el TestClient se presenta como "testclient": sin esto, el middleware de API
+# keys rechazaría todos los tests como si vinieran de fuera
+os.environ.setdefault("CHAINMIND_TRUSTED_HOSTS", "testclient")
+# las claves se generan en un temporal, nunca en el archivo real
+import tempfile as _tempfile
+os.environ["CHAINMIND_KEYS_FILE"] = str(
+    pathlib.Path(_tempfile.gettempdir()) / "chainmind_test_keys.json"
+)

@@ -162,13 +162,12 @@ def _fallback_narrative(trace: dict) -> str:
 
 
 def narrarize_trace(trace: dict) -> dict:
-    """Explica el trazado con IA sin poder inventar nodos ni importes.
+    """Explica el trazado con el agente `investigacion` sin inventar nodos.
 
     `trace` sale de `trace_from_txs()`, así que todo lo que se le da al modelo
-    es lo que el BFS encontró de verdad. La validación de `agents.llm` es la
-    misma que en el resto de agentes.
+    es lo que el BFS encontró de verdad. Hereda el filtro global de seguridad.
     """
-    from . import llm
+    from . import agents
     fallback = _fallback_narrative(trace)
     paths = trace.get("paths") or []
     if not paths:
@@ -187,6 +186,5 @@ def narrarize_trace(trace: dict) -> dict:
         "continuación y qué limitaciones tiene este trazado. No concluyas nada que no "
         "salga de los datos."
     )
-    res = llm.explain_with_llm(TRACE_SYSTEM, user, fallback, max_tokens=380,
-                               temperature=0.15, purpose="investigation")
+    res = agents.run("investigacion", user, fallback, max_tokens=380)
     return {"narrative": res["text"], "ai": {k: v for k, v in res.items() if k != "text"}}

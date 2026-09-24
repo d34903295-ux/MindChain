@@ -120,7 +120,6 @@ SYSTEM_PROMPT = (
     "confirmar on-chain antes de actuar."
 )
 
-
 def _safe_profile(profile: dict) -> str:
     """Perfil para el prompt: sin volcar campos de control ni datos ajenos."""
     permitidos = (
@@ -148,28 +147,25 @@ def _wallet_prompt(profile: dict, score: int | None, factors: list[str]) -> str:
 
 
 def explain(profile: dict, score: int | None, factors: list[str]) -> str:
-    """Explicación del score. Usa un LLM real si hay uno disponible.
+    """Explicación del score. Delega en el agente especializado `explicacion`.
 
-    Sin proveedor, con score `None` o si la salida del modelo no supera la
-    validación, devuelve siempre el texto determinista: el usuario nunca ve una
-    alucinación ni una acusación.
+    Sin proveedor, con score `None` o si la salida no supera el filtro, devuelve
+    siempre el texto determinista: el usuario nunca ve una alucinación.
     """
-    from . import llm
+    from . import agents
     if score is None:
         return _fallback(profile, score, factors)
-    res = llm.explain_with_llm(SYSTEM_PROMPT, _wallet_prompt(profile, score, factors),
-                               _fallback(profile, score, factors), max_tokens=420,
-                               temperature=0.2, purpose="explanation", score=score)
+    res = agents.run("explicacion", _wallet_prompt(profile, score, factors),
+                     _fallback(profile, score, factors), score=score)
     return res["text"]
 
 
 def explain_detailed(profile: dict, score: int | None, factors: list[str]) -> dict:
-    """Como `explain()` pero devuelve la trazabilidad: qué IA respondió y por qué."""
-    from . import llm
+    """Como `explain()` pero devuelve la trazabilidad: qué agente y qué IA."""
+    from . import agents
     if score is None:
         return {"explanation": _fallback(profile, score, factors),
                 "ai": {"source": "determinista", "motivo": "sin score no hay nada que explicar"}}
-    res = llm.explain_with_llm(SYSTEM_PROMPT, _wallet_prompt(profile, score, factors),
-                               _fallback(profile, score, factors), max_tokens=420,
-                               temperature=0.2, purpose="explanation", score=score)
+    res = agents.run("explicacion", _wallet_prompt(profile, score, factors),
+                     _fallback(profile, score, factors), score=score)
     return {"explanation": res["text"], "ai": {k: v for k, v in res.items() if k != "text"}}

@@ -47,7 +47,10 @@ PRIORITY = ("ollama", "anthropic", "openai", "gemini", "groq", "openrouter")
 PROVIDERS: dict[str, dict] = {
     "ollama": {
         "url": os.getenv("OLLAMA_URL", "http://127.0.0.1:11434"),
-        "model": os.getenv("CHAINMIND_LLM_MODEL_OLLAMA", "qwen2.5:7b"),
+        # Medido en esta máquina (scripts/bench_models.py): phi4-mini 3,3 s y
+        # siempre supera el filtro; qwen2.5:7b 7,5 s. Los agentes pueden pedir
+        # otro modelo cada uno (agents.agents).
+        "model": os.getenv("CHAINMIND_LLM_MODEL_OLLAMA", "phi4-mini"),
         "style": "ollama",
         "env": None,
         "price_in": 0.0, "price_out": 0.0,
@@ -166,16 +169,29 @@ def _record_success(provider: str) -> None:
         _stats["ok"] += 1
 
 
+_ollama_cache: dict[str, object] = {"at": 0.0, "models": []}
+MODELS_TTL = float(os.getenv("CHAINMIND_OLLAMA_MODELS_TTL", "60"))
+
+
 def ollama_models() -> list[str]:
-    """Modelos instalados en Ollama. Permite avisar si el configurado no existe."""
+    """Modelos instalados en Ollama. Permite avisar si el configurado no existe.
+
+    Con caché: /status lo consulta en cada refresco del panel y sin esto cada
+    visita sería una llamada de red a Ollama.
+    """
+    ahora = time.time()
+    if ahora - float(_ollama_cache["at"]) < MODELS_TTL:
+        return list(_ollama_cache["models"])  # type: ignore[arg-type]
     try:
         url = PROVIDERS["ollama"]["url"].rstrip("/") + "/api/tags"
         req = urllib.request.Request(url, headers={"User-Agent": "ChainMind/1.0"})
         with urllib.request.urlopen(req, timeout=5) as r:
             data = json.load(r)
-        return [m.get("name", "") for m in (data.get("models") or []) if m.get("name")]
+        modelos = [m.get("name", "") for m in (data.get("models") or []) if m.get("name")]
     except Exception:
-        return []
+        modelos = []
+    _ollama_cache.update({"at": ahora, "models": modelos})
+    return modelos
 
 
 def ollama_sugerido() -> str | None:
@@ -235,9 +251,10 @@ def status() -> dict:
 
 
 # ------------------------------------------------------------------ payload
-def _payload(provider: str, system: str, user: str, max_tokens: int, temperature: float) -> dict:
+def _payload(provider: str, system: str, user: str, max_tokens: int, temperature: float,
+             modelo: str | None = None) -> tuple[dict, dict, str]:
     cfg = PROVIDERS[provider]
-    modelo = cfg["model"]
+    modelo = modelo or cfg["model"]
     if cfg["style"] == "anthropic":
         return {
             "model": modelo, "max_tokens": max_tokens, "temperature": temperature,
@@ -301,8 +318,8 @@ def _extract(provider: str, data: dict) -> tuple[str, int, int, bool]:
 
 
 # ------------------------------------------------------------------ cache
-def _key(provider: str, system: str, user: str, max_tokens: int, temperature: float) -> str:
-    raw = json.dumps([provider, PROVIDERS[provider]["model"], system, user, max_tokens, temperature],
+def _key(provider: str, modelo: str, system: str, user: str, max_tokens: int, temperature: float) -> str:
+    raw = json.dumps([provider, modelo, system, user, max_tokens, temperature],
                      ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -316,10 +333,11 @@ def clear_cache() -> int:
 
 # ----------------------------------------------------------------- llamada
 def complete(system: str, user: str, *, max_tokens: int = 400, temperature: float = 0.2,
-             purpose: str = "generic") -> dict:
+             purpose: str = "generic", model: str | None = None) -> dict:
     """Llama al proveedor activo. Nunca lanza: devuelve dict con `ok`.
 
     `ok=False` significa que el llamador debe usar su texto determinista.
+    `model` permite que cada agente use el suyo sin tocar el global.
     """
     provider = active()
     if not provider:
@@ -327,7 +345,8 @@ def complete(system: str, user: str, *, max_tokens: int = 400, temperature: floa
     if breaker_open(provider):
         return {"ok": False, "error": f"circuit breaker abierto para {provider}"}
 
-    ck = _key(provider, system, user, max_tokens, temperature)
+    modelo = model or PROVIDERS[provider]["model"]
+    ck = _key(provider, modelo, system, user, max_tokens, temperature)
     with _lock:
         hit = _cache.get(ck)
         if hit and (time.time() - hit[0]) < CACHE_TTL:
@@ -335,7 +354,7 @@ def complete(system: str, user: str, *, max_tokens: int = 400, temperature: floa
             return {**hit[1], "cached": True}
 
     cfg = PROVIDERS[provider]
-    cuerpo, headers, url = _payload(provider, system, user, max_tokens, temperature)
+    cuerpo, headers, url = _payload(provider, system, user, max_tokens, temperature, modelo)
     ultimo_error = ""
     for intento in range(MAX_RETRIES + 1):
         t0 = time.time()
@@ -357,7 +376,7 @@ def complete(system: str, user: str, *, max_tokens: int = 400, temperature: floa
                 _stats["last_latency_s"] = latencia
             _record_success(provider)
             salida = {
-                "ok": True, "text": texto, "provider": provider, "model": cfg["model"],
+                "ok": True, "text": texto, "provider": provider, "model": modelo,
                 "latency_s": latencia, "tokens_in": tin, "tokens_out": tout,
                 "usd": round(coste, 8), "purpose": purpose, "cached": False,
                 "truncado": truncado,

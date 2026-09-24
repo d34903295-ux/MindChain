@@ -367,10 +367,11 @@ CONTRACT_SYSTEM = (
 
 
 def _explain_contract(address, findings, score, lvl, proxy, proxy_method, fetched, deterministic) -> tuple[str, dict]:
-    """Redacta los hallazgos con IA sin poder inventar nada nuevo."""
-    from . import llm
+    """Redacta los hallazgos con el agente `contratos` sin poder inventar nada."""
+    from . import agents
     if not findings:
-        return deterministic, {"source": "determinista", "motivo": "sin hallazgos que explicar"}
+        return deterministic, {"source": "determinista", "agente": "contratos",
+                              "motivo": "sin hallazgos que explicar"}
     lista = "\n".join(
         f"- {f['id']} (peso {f.get('weight', 0)}, origen {f.get('origin', '?')}): {f.get('message', '')}"
         for f in findings
@@ -387,6 +388,5 @@ def _explain_contract(address, findings, score, lvl, proxy, proxy_method, fetche
         "qué permisos tiene, qué debería comprobar y qué limitaciones tiene este análisis "
         "(Slither no pudo ejecutarse, fuente no verificada, etc.)."
     )
-    res = llm.explain_with_llm(CONTRACT_SYSTEM, user, deterministic, max_tokens=420,
-                               temperature=0.15, purpose="contract", score=score)
+    res = agents.run("contratos", user, deterministic, score=score)
     return res["text"], {k: v for k, v in res.items() if k != "text"}
