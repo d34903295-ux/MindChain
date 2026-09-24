@@ -25,7 +25,7 @@ import time
 
 STORE = pathlib.Path(os.getenv(
     "CHAINMIND_KEYS_FILE",
-    str(pathlib.Path(__file__).resolve().parents[1] / "data" / "api_keys.json"),
+    str(pathlib.Path(__file__).resolve().parents[2] / "data" / "api_keys.json"),
 ))
 PREFIJO = "cm_"
 

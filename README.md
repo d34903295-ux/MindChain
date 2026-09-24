@@ -114,9 +114,22 @@ curl -H "X-API-Key: cm_..." http://127.0.0.1:8000/analyze-wallet \
 - `CHAINMIND_TRUSTED_HOSTS=proxy,host.docker.internal` declara hosts de
   confianza (proxy inverso o red de Docker).
 
+El servidor escucha solo en `127.0.0.1` a propósito. Para usarlo desde otro
+equipo hay que exponerlo, y al hacerlo la clave deja de ser opcional:
+
+```powershell
+[Environment]::SetEnvironmentVariable("CHAINMIND_BIND","0.0.0.0","Machine")
+schtasks /run /tn "ChainMindBackend"
+```
+
+Comprobado en la red local: sin clave → `401`, con clave → `200`, con clave
+inventada → `401`. Para volver al modo local: mismo comando con
+`127.0.0.1`.
+
 Estas son claves **de ChainMind**, para autorizar a quien llama. Las claves de
 los proveedores de IA (Anthropic, OpenAI…) no se devuelven por ningún
-endpoint: hay un test que lo comprueba.
+endpoint: hay un test que lo comprueba. El archivo `data/api_keys.json` está
+en `.gitignore` y guarda solo el hash SHA-256.
 
 ## Criterio salida Fase 0
 `docker-compose up` levanta Postgres+Neo4j+backend+indexer y el indexer escribe bloques recientes a Postgres/Neo4j.

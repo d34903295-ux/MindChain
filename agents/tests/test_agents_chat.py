@@ -204,6 +204,20 @@ def test_chat_nunca_devuelve_credenciales(monkeypatch):
     assert "sk-ant-secreto" not in json.dumps(r["datos"], ensure_ascii=False)
 
 
+def test_followup_de_red_usa_el_feed(monkeypatch):
+    """Tras preguntar por el sistema, '¿y en base?' quiere el feed de base."""
+    monkeypatch.setitem(chat.HERRAMIENTAS, "feed",
+                        lambda a: {"cadena": "base", "bloque": 1, "transacciones": 2, "alertas": 0})
+    hist = [{"role": "user", "content": "como va el sistema"}]
+    paso = chat.ejecutar("¿y en base?", hist)
+    assert paso["herramienta"] == "feed" and paso["datos"]["cadena"] == "base"
+
+
+def test_sin_historial_no_inventa_intencion():
+    paso = chat.ejecutar("¿y en base?")
+    assert paso["herramienta"] is None
+
+
 def test_herramientas_publicas_no_exponen_secretos():
     for h in chat.herramientas_publicas():
         assert {"nombre", "args", "descripcion"} <= set(h)

@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/watch", label: "Vigilancia" },
   { href: "/wallet", label: "Wallet" },
   { href: "/contract", label: "Contrato" },
+  { href: "/chat", label: "Chat" },
 ];
 
 export function SiteHeader() {

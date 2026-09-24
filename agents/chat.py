@@ -213,6 +213,7 @@ def ejecutar(texto: str, historial: list[dict] | None = None) -> dict:
     addr = _direccion(texto)
     intencion = _intencion(texto)
     chain = _cadena(texto)
+    t_lower = (texto or "").lower()
     hist = (historial or [])[-MAX_HISTORIAL:]
 
     elegido: str | None = None
@@ -239,6 +240,12 @@ def ejecutar(texto: str, historial: list[dict] | None = None) -> dict:
             "respuesta": "Necesito una dirección para mirarla. Pásame una del tipo 0x seguida "
                          "de 40 caracteres.",
         }
+
+    # Follow-up corto: «¿y en base?» después de una pregunta sobre el sistema
+    # casi siempre es "ahora enséñame el feed de esa red". Sin esto el chat
+    # pide una dirección cuando el usuario solo ha cambiado de red.
+    if not elegido and hist and len(texto.strip()) < 40 and re.search(r"\bbase\b|\bethereum\b|\beth\b", t_lower):
+        elegido = "feed"
 
     datos: dict = {}
     if elegido:
