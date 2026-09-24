@@ -683,6 +683,75 @@ img {
   border-block-end: 1px solid var(--border);
 }
 
+/* ------- Selección ------- */
+::selection {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+/* ------- Micro-interacción en botones ------- */
+.btn {
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px -8px var(--primary);
+}
+.btn:active {
+  transform: none;
+  box-shadow: none;
+}
+
+/* ------- Marco con glow que sigue el cursor (técnica libre estilo Border Glow) ------- */
+.glow-frame {
+  position: relative;
+  border-radius: 0.95rem;
+  padding: 1px;
+  background: radial-gradient(
+    220px circle at var(--mx, 80%) var(--my, 0%),
+    color-mix(in srgb, var(--primary) 55%, transparent),
+    var(--border) 75%
+  );
+}
+.glow-frame .terminal {
+  border: none;
+}
+
+/* ------- Fósforo CRT sutil sobre la terminal (técnica libre estilo Phosphor) ------- */
+.terminal {
+  position: relative;
+}
+.terminal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.028) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* ------- Campo de glifos del hero ------- */
+.hero-stage {
+  position: relative;
+}
+.hero-stage > *:not(canvas) {
+  position: relative;
+  z-index: 1;
+}
+.glyph-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+  pointer-events: none;
+  mask-image: radial-gradient(75% 95% at 72% 18%, black, transparent 78%);
+}
+
 /* ------- Footer ------- */
 .footer-grid {
   display: grid;

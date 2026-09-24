@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Row = {
   hash: string;
@@ -31,6 +31,15 @@ export function LiveTerminal() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [block, setBlock] = useState<number | null>(null);
   const [live, setLive] = useState(false);
+  const frame = useRef<HTMLDivElement>(null);
+
+  const glow = (e: React.MouseEvent) => {
+    const el = frame.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+    el.style.setProperty("--my", `${e.clientY - r.top}px`);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -60,6 +69,7 @@ export function LiveTerminal() {
   const data = rows ?? FALLBACK;
 
   return (
+    <div className="glow-frame" ref={frame} onMouseMove={glow}>
     <figure className="terminal terminal-live" aria-label="Transacciones analizadas en vivo" style={{ margin: 0 }}>
       <div className="terminal-bar" aria-hidden="true">
         <i />
@@ -95,5 +105,6 @@ export function LiveTerminal() {
         <Link href="/watch">abrir vigilancia</Link>.
       </figcaption>
     </figure>
+    </div>
   );
 }

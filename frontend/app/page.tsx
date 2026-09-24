@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GlyphField } from "../components/GlyphField";
 import { LiveTerminal } from "../components/LiveTerminal";
 import { Reveal } from "../components/Reveal";
 
@@ -6,7 +7,8 @@ export default function Landing() {
   return (
     <main id="contenido">
       <div className="landing-wide">
-        <div className="hero-grid">
+        <div className="hero-grid hero-stage">
+          <GlyphField />
           <section aria-labelledby="hero">
             <p className="eyebrow hero-enter">Ethereum · Base · 7 agentes de IA</p>
             <h1 id="hero" className="hero-title-xl hero-enter hero-enter-1">
