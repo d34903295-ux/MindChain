@@ -160,6 +160,8 @@ def profile_wallet(address: str, txs: list[dict], raw: dict | None = None) -> di
         "address": address,
         "tx_count": tx_count,
         "tx_count_reliable": tx_count_reliable,
+        "insufficient_data": bool(raw.get("insufficient_data")),
+        "balance_known": bool(raw.get("balance_known", True)),
         "age_days": age_days,
         "first_seen": first_dt.strftime("%Y-%m-%d %H:%M:%S") if first_dt else None,
         "last_seen": last_dt.strftime("%Y-%m-%d %H:%M:%S") if last_dt else None,
@@ -197,4 +199,7 @@ def build_profile(address: str, fetched: dict) -> tuple[dict, list[dict]]:
     txs = normalize_txs(address, fetched.get("calls", []))
     profile = profile_wallet(address, txs, fetched.get("raw_address", {}))
     profile["chain"] = fetched.get("chain", "ethereum")
+    dq = fetched.get("data_quality") or {}
+    profile["insufficient_data"] = bool(dq.get("insufficient_data")) or not txs and profile.get("tx_count") is None
+    profile["data_errors"] = dq.get("errors", [])
     return profile, txs

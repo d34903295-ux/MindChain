@@ -30,6 +30,22 @@ def analyze_wallet(payload: AnalyzeRequest):
     score, factors = score_wallet(profile, txs)
     text = explain(profile, score, factors)
     elapsed = round(time.time() - t0, 2)
+    dq = fetched.get("data_quality", {})
+    if score is None:
+        # sin datos no se escribe reporte ni se alerta: no hay nada que evaluar
+        return {
+            "address": payload.address,
+            "chain": payload.chain.lower(),
+            "profile": profile,
+            "risk_score": None,
+            "risk_factors": factors,
+            "explanation": text,
+            "elapsed_s": elapsed,
+            "source": fetched.get("source"),
+            "cached": bool(fetched.get("cached")),
+            "data_quality": dq,
+            "alert": {"sent": False, "reason": "sin-datos"},
+        }
     try:
         from app.db.postgres import upsert_wallet_report
         upsert_wallet_report(payload.address, profile, score, factors, text)
@@ -44,4 +60,4 @@ def analyze_wallet(payload: AnalyzeRequest):
     return {"address": payload.address, "chain": payload.chain.lower(), "profile": profile,
             "risk_score": score, "risk_factors": factors, "explanation": text,
             "elapsed_s": elapsed, "source": fetched.get("source"),
-            "cached": bool(fetched.get("cached")), "alert": alert}
+            "cached": bool(fetched.get("cached")), "data_quality": dq, "alert": alert}

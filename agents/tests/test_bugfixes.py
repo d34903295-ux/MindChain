@@ -3,9 +3,10 @@ import sys
 
 sys.path.insert(0, ".")
 
-from agents.wallet_intelligence import profile_wallet, _parse_time
+from agents.wallet_intelligence import profile_wallet, build_profile, _parse_time
 from agents.fetcher import normalize_txs, _hex_to_int
 from agents.risk_scoring import score_wallet
+from agents.explanation import explain
 from agents.price import get_price_usd
 
 
@@ -214,6 +215,51 @@ def test_score_es_provisional_con_poca_muestra():
     addr = "0x" + "a" * 40
     s, f = score_wallet({"address": addr, "tx_count": 100, "sample_confidence": "baja"}, [])
     assert "datos_insuficientes_score_provisional" in f
+
+
+def test_score_none_cuando_no_hay_datos():
+    """Con la red caída el score debe ser None, nunca un 0/30 inventado."""
+    addr = "0x" + "a" * 40
+    s, f = score_wallet({"address": addr, "insufficient_data": True, "tx_count": None}, [])
+    assert s is None
+    assert f == ["datos_insuficientes_no_evaluable"]
+
+
+def test_explicacion_abstiene_sin_datos(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    t = explain(
+        {"address": "0xabc", "insufficient_data": True, "data_errors": ["rpc: ninguna cadena RPC respondio"]},
+        None,
+        ["datos_insuficientes_no_evaluable"],
+    )
+    assert "no se evalúa" in t
+    assert "Reintenta" in t
+
+
+def test_abstencion_impide_llamar_a_wallet_nueva(monkeypatch):
+    """Un fallo de red jamás debe producir 'wallet nueva'."""
+    import agents.fetcher as F
+    monkeypatch.setattr(F, "_http_json", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("red caida")))
+    monkeypatch.setattr(F, "_http_get", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("red caida")))
+    F._cache.clear()
+    r = F.fetch_wallet_data("0x" + "d" * 40, use_cache=False)
+    dq = r["data_quality"]
+    assert dq["insufficient_data"] is True
+    assert dq["degraded"] is True
+    assert dq["errors"], "debe reportar la causa"
+    p, txs = build_profile("0x" + "d" * 40, r)
+    assert p["insufficient_data"] is True
+    s, f = score_wallet(p, txs)
+    assert s is None
+    assert "wallet_nueva_pocas_txs" not in f
+
+
+def test_rpc_snapshot_reporta_si_respondio(monkeypatch):
+    import agents.fetcher as F
+    monkeypatch.setattr(F, "_rpc_call", lambda *a, **k: None)
+    snap = F.rpc_snapshot(["http://x"], "0x" + "a" * 40)
+    assert snap["any_rpc"] is False
+    assert snap["balance_known"] is False
 
 
 def test_price_cache_no_rompe():

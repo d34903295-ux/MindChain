@@ -1,27 +1,45 @@
-"""Investigation Agent (Fase 4): trazado de rutas de fondos.
-Primario: BFS en memoria sobre txs (siempre disponible).
-Enriquecido: Cypher sobre Neo4j cuando hay conexion (best-effort).
+"""Investigation Agent: trazado de rutas de fondos.
+
+- BFS en memoria sobre las txs disponibles (siempre funciona)
+- Enriquecido con Cypher/Neo4j si hay base de datos
+- Anota los nodos que caen en la watchlist y el valor total por ruta
 """
 from collections import deque
+
+from . import watchlist
+
 
 def _low(a):
     return str(a or "").lower()
 
+
 def build_edges(txs):
     edges = []
+    seen_hashes = set()
     for t in txs or []:
         f, to = _low(t.get("from")), _low(t.get("to"))
         if not f or not to or f == to:
             continue
-        edges.append({"from": f, "to": to, "hash": t.get("hash", ""),
+        h = t.get("hash") or ""
+        if h and h in seen_hashes:
+            continue  # misma tx duplicada por varias fuentes
+        if h:
+            seen_hashes.add(h)
+        edges.append({"from": f, "to": to, "hash": h,
                       "value_usd": float(t.get("value_usd") or 0),
                       "time": t.get("time", ""), "block": t.get("block")})
     return edges
 
-def trace_from_txs(address, txs, max_depth=3, max_paths=50, direction="out"):
-    """BFS desde address. direction out|in|both. Devuelve nodos, aristas y rutas."""
+
+def trace_from_txs(address, txs, max_depth=3, max_paths=50, direction="out", min_value_usd=0.0):
+    """BFS desde `address`. direction: out | in | both.
+
+    `min_value_usd` filtra aristas: por defecto 0 (no filtra) para no perder
+    movimientos pequeños que conectan la ruta.
+    """
     start = _low(address)
-    edges = build_edges(txs)
+    all_edges = build_edges(txs)
+    edges = [e for e in all_edges if e["value_usd"] >= min_value_usd] if min_value_usd else all_edges
     fwd, bwd = {}, {}
     for e in edges:
         fwd.setdefault(e["from"], []).append(e)
@@ -53,9 +71,33 @@ def trace_from_txs(address, txs, max_depth=3, max_paths=50, direction="out"):
         for a, b in zip(p, p[1:]):
             used.add((a, b))
     kept = [e for e in edges if (e["from"], e["to"]) in used]
-    return {"start": start, "direction": direction, "max_depth": max_depth,
-            "nodes": nodes, "edges": kept, "paths": paths,
-            "n_paths": len(paths), "n_nodes": len(nodes)}
+    # valor de cada ruta (suma de sus saltos) para priorizar las importantes
+    edge_value = {(e["from"], e["to"]): e["value_usd"] for e in kept}
+    path_values = []
+    for p in paths:
+        total = sum(edge_value.get((a, b), 0.0) for a, b in zip(p, p[1:]))
+        path_values.append(total)
+    order = sorted(range(len(paths)), key=lambda i: -path_values[i])
+    paths = [paths[i] for i in order]
+    path_values = [path_values[i] for i in order]
+    flagged = []
+    for n in nodes:
+        label = watchlist.get(n)
+        if label:
+            flagged.append({"address": n, "label": label})
+    return {
+        "start": start,
+        "direction": direction,
+        "max_depth": max_depth,
+        "nodes": nodes,
+        "edges": kept,
+        "paths": paths,
+        "path_values_usd": path_values,
+        "watchlist_nodes": flagged,
+        "n_paths": len(paths),
+        "n_nodes": len(nodes),
+        "total_traced_usd": round(sum(e["value_usd"] for e in kept), 2),
+    }
 
 def neo4j_expand(address, max_depth=2, limit=100):
     """Expande 1..N saltos vía Cypher. Best-effort: {} con error si no hay Neo4j."""

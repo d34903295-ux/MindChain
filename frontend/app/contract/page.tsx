@@ -9,7 +9,7 @@ type Rep = {
   chain: string;
   is_contract: boolean;
   verified: boolean;
-  risk_score: number;
+  risk_score: number | null;
   permissions: string[];
   risks: Risk[];
   explanation: string;
@@ -140,7 +140,7 @@ export default function ContractPage() {
               <Chip tone="ok">ninguno detectado</Chip>
             ) : (
               res.permissions.map(p => (
-                <Chip key={p} tone={riskTone(res.risk_score)}>
+                <Chip key={p} tone={res.risk_score === null ? "neutral" : riskTone(res.risk_score)}>
                   {p}
                 </Chip>
               ))

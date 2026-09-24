@@ -18,12 +18,21 @@ def _lower(v) -> str:
     return str(v or "").strip().lower()
 
 
-def score_wallet(profile: dict, txs: list[dict]) -> tuple[int, list[str]]:
-    """Devuelve (score 0-100, factores). Determinista y sin dependencias externas."""
+def score_wallet(profile: dict, txs: list[dict]) -> tuple[int | None, list[str]]:
+    """Devuelve (score 0-100 o None si no hay datos, factores).
+
+    None significa "no se puede evaluar": preferimos no puntuar a puntuar sobre
+    datos inventados. Un sistema de riesgo que devuelve 0 cuando falló la red
+    es peor que uno que devuelve "no sé".
+    """
     factors: list[str] = []
     score = 0
     addr = _lower(profile.get("address"))
     txs = [t for t in (txs or []) if isinstance(t, dict)]
+
+    # --- abstención: no hay datos suficientes para juzgar
+    if profile.get("insufficient_data"):
+        return None, ["datos_insuficientes_no_evaluable"]
     try:
         tx_count = profile.get("tx_count")
         tx_count = int(tx_count) if tx_count is not None else None

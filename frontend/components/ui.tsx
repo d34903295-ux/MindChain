@@ -95,8 +95,25 @@ export function Stat({ term, children }: { term: string; children: ReactNode }) 
 
 const ARC = Math.PI * 56;
 
-export function RiskGauge({ value, label }: { value: number; label: string }) {
-  const toneName = riskTone(value);
+export function RiskGauge({ value, label }: { value: number | null; label: string }) {
+  const toneName = riskTone(value ?? 0);
+
+  if (value === null || value === undefined) {
+    return (
+      <div className="gauge-wrap is-empty" role="status" aria-label={`${label}: no evaluable`}>
+        <div>
+          <div className="gauge-num" style={{ color: "var(--muted)" }}>
+            n/d
+          </div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>{label}: no evaluable</div>
+          <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+            Faltan datos de la cadena. No se muestra score para no dar una falsa tranquilidad.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const filled = Math.max(0, Math.min(100, value)) / 100;
   return (
     <div

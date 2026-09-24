@@ -7,11 +7,13 @@ type Report = {
   address: string;
   chain: string;
   profile: Record<string, unknown>;
-  risk_score: number;
+  risk_score: number | null;
   risk_factors: string[];
   explanation: string;
   elapsed_s?: number;
   source?: string;
+  cached?: boolean;
+  data_quality?: { degraded?: boolean; errors?: string[] };
 };
 
 function str(v: unknown): string {
@@ -136,17 +138,24 @@ export default function WalletPage() {
 
           <div className="result-risk">
             <RiskGauge value={res.risk_score} label="Riesgo" />
-            <div className="chip-row">
-              {res.risk_factors.length === 0 ? (
-                <Chip tone="ok">sin factores de riesgo</Chip>
-              ) : (
-                res.risk_factors.map(f => (
-                  <Chip key={f} tone={riskTone(res.risk_score)}>
-                    {f}
-                  </Chip>
-                ))
-              )}
-            </div>
+            {res.risk_score !== null && (
+              <div className="chip-row">
+                {res.risk_factors.length === 0 ? (
+                  <Chip tone="ok">sin factores de riesgo</Chip>
+                ) : (
+                  res.risk_factors.map(f => (
+                    <Chip key={f} tone={riskTone(res.risk_score ?? 0)}>
+                      {f}
+                    </Chip>
+                  ))
+                )}
+              </div>
+            )}
+            {res.data_quality?.errors && res.data_quality.errors.length > 0 && (
+              <p className="data-warning" style={{ marginBlockStart: "0.75rem" }}>
+                Fuente degradada: {res.data_quality.errors.join(" · ")}
+              </p>
+            )}
           </div>
 
           <h3>Perfil</h3>

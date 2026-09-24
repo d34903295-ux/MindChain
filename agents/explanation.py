@@ -7,6 +7,8 @@ import json
 import os
 import urllib.request
 
+from .md import safe_label
+
 MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
 
 FACTOR_TEXT = {
@@ -20,6 +22,7 @@ FACTOR_TEXT = {
     "dormante_reactivada": "wallet dormida que vuelve a moverse: revisar el motivo",
     "balance_alto_wallet_reciente": "balance alto en una wallet reciente: conviene verificar el origen",
     "datos_insuficientes_score_provisional": "los datos disponibles son pocos: el score es provisional",
+    "datos_insuficientes_no_evaluable": "no hay datos suficientes: la wallet no se evalúa",
 }
 
 DISCLAIMERS = (
@@ -31,7 +34,8 @@ def _factor_text(factor: str) -> str:
     if factor in FACTOR_TEXT:
         return FACTOR_TEXT[factor]
     if factor.startswith("interaccion_watchlist:"):
-        label = factor.split(":", 1)[1].replace("-", " ")
+        # la etiqueta puede venir de una watchlist remota: se sanea aquí
+        label = safe_label(factor.split(":", 1)[1].replace("-", " "))
         return f"interacción con una dirección listada ({label}): es una señal de screening, no una prueba"
     return factor.replace("_", " ")
 
@@ -43,12 +47,23 @@ def _fmt_money(v) -> str:
         return "n/d"
 
 
-def _fallback(profile: dict, score: int, factors: list[str]) -> str:
+def _fallback(profile: dict, score: int | None, factors: list[str]) -> str:
     a = profile.get("address")
     n = profile.get("tx_count", 0)
     age = profile.get("age_days")
     chain = profile.get("chain", "ethereum")
     chain_label = {"ethereum": "Ethereum", "base": "Base"}.get(str(chain).lower(), str(chain))
+
+    # Sin datos no hay veredicto: se dice explícitamente.
+    if score is None:
+        errores = profile.get("data_errors") or []
+        detalle = (" No se pudieron obtener datos de la cadena"
+                   + (f" ({errores[0]})" if errores else "")
+                   + ", por lo que esta wallet no se evalúa. Reintenta en unos segundos.")
+        if profile.get("insufficient_data"):
+            return f"Wallet {a} ({chain_label}): sin datos suficientes para analizarla." + detalle
+        return f"Wallet {a} ({chain_label}): la evaluación no está disponible." + detalle
+
     lvl = "bajo" if score < 30 else ("medio" if score < 70 else "alto")
     age_txt = f"{age} días" if isinstance(age, int) else "sin fecha de primera actividad conocida"
     tx_txt = f"{n} transacciones históricas" if n is not None else "histórico de transacciones no disponible"
@@ -65,9 +80,9 @@ def _fallback(profile: dict, score: int, factors: list[str]) -> str:
     return base + " Factores: " + "; ".join(_factor_text(f) for f in factors) + ". " + DISCLAIMERS
 
 
-def explain(profile: dict, score: int, factors: list[str]) -> str:
+def explain(profile: dict, score: int | None, factors: list[str]) -> str:
     key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not key:
+    if not key or score is None:
         return _fallback(profile, score, factors)
     try:
         readable = "; ".join(_factor_text(f) for f in factors) or "sin factores"

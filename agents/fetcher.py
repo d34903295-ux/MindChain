@@ -60,17 +60,26 @@ def _rpc_first(rpcs, method, params, timeout=5):
     return None
 
 def rpc_snapshot(rpcs, address):
+    """Snapshot mínimo por RPC. `any_rpc=False` indica que no hubo respuesta."""
     bal = _rpc_first(rpcs, "eth_getBalance", [address, "latest"])
     ntx = _rpc_first(rpcs, "eth_getTransactionCount", [address, "latest"])
     code = _rpc_first(rpcs, "eth_getCode", [address, "latest"])
+    any_rpc = any(v is not None for v in (bal, ntx, code))
+
     def h2i(h):
         try:
             return int(h, 16)
         except Exception:
             return 0
-    return {"balance_wei": h2i(bal) if isinstance(bal, str) else 0,
-            "tx_count": h2i(ntx) if isinstance(ntx, str) else 0,
-            "code": code if isinstance(code, str) else "0x"}
+
+    return {
+        "balance_wei": h2i(bal) if isinstance(bal, str) else 0,
+        "balance_known": isinstance(bal, str),
+        "tx_count": h2i(ntx) if isinstance(ntx, str) else 0,
+        "tx_count_known": isinstance(ntx, str),
+        "code": code if isinstance(code, str) else "",
+        "any_rpc": any_rpc,
+    }
 
 def fetch_blockchair(slug, address, limit=25):
     url = "https://api.blockchair.com/" + slug + "/dashboards/address/" + address + "?limit=" + str(limit)
@@ -109,6 +118,11 @@ def fetch_blockscout(base_url, address, limit=25):
     return raw, items
 
 def fetch_wallet_data(address, chain="ethereum", limit=25, use_cache=True):
+    """Devuelve datos de la wallet + `data_quality`.
+
+    IMPORTANTE: si ninguna fuente responde, NO se fabrican ceros. Se marca
+    `insufficient_data` para que el scoring y la UI abstain de judgements.
+    """
     key = chain_key(chain)
     cfg = get_chain(key)
     rpcs = rpc_list(key)
@@ -119,28 +133,48 @@ def fetch_wallet_data(address, chain="ethereum", limit=25, use_cache=True):
         if hit is not None:
             return {**hit, "cached": True}
 
+    errors: list[str] = []
     result = None
     if adapter == "blockchair":
         try:
             raw, calls = fetch_blockchair(cfg["blockchair_slug"], address, limit)
             result = {"raw_address": raw, "calls": calls, "rpc": {}, "source": "blockchair", "chain": key}
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"blockchair: {str(e)[:80]}")
     elif adapter == "blockscout":
         try:
             raw, calls = fetch_blockscout(cfg["blockscout"], address, limit)
             result = {"raw_address": raw, "calls": calls, "rpc": {}, "source": "blockscout", "chain": key}
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"blockscout: {str(e)[:80]}")
 
     if result is None:
         snap = rpc_snapshot(rpcs, address)
         code = snap.get("code", "0x")
         raw = {"type": "contract" if isinstance(code, str) and len(code) > 4 else "account",
                "balance": str(snap.get("balance_wei", 0)),
-               "transaction_count": int(snap.get("tx_count", 0))}
+               "transaction_count": int(snap.get("tx_count", 0)) if snap.get("tx_count_known") else None,
+               "tx_count_reliable": False}
         result = {"raw_address": raw, "calls": [], "rpc": snap, "source": "rpc-fallback", "chain": key}
+        if not snap.get("any_rpc"):
+            errors.append("rpc: ninguna cadena RPC respondio")
 
+    # Calidad del dato: sin llamadas y sin contadoresKnown no hay análisis posible
+    raw = result.get("raw_address", {})
+    has_calls = bool(result.get("calls"))
+    has_history = raw.get("transaction_count") is not None
+    insufficient = not has_calls and not has_history
+    if insufficient and result.get("source") != "rpc-fallback":
+        errors.append("fuente sin datos utilizables")
+
+    result["data_quality"] = {
+        "source": result.get("source"),
+        "degraded": result.get("source") == "rpc-fallback" and insufficient,
+        "insufficient_data": insufficient,
+        "sample_rows": len(result.get("calls") or []),
+        "has_history": has_history,
+        "errors": errors,
+    }
     result["cached"] = False
     return _cache_put(cache_key, result)
 

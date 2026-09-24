@@ -1,5 +1,7 @@
+import statistics
+
 import agents.watcher as W
-from agents.watcher import analyze_tx, norm_tx, scan
+from agents.watcher import analyze_tx, norm_tx, robust_z, scan, window_stats
 
 TX = {
     "hash": "0xabc",
@@ -83,3 +85,53 @@ def test_scan_cadena_invalida():
         assert False
     except ValueError:
         assert True
+
+
+def test_mad_se_adapta_a_cada_red():
+    """En una red con baseline de 0.5 ETH, 5 ETH debe ser outlier estadístico."""
+    W._windows.clear()
+    baseline = ([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] * 6)[:40]  # 40 muestras > mínimo
+    for v in baseline:
+        W._windows["base"].append(v)
+    med, mad = W.window_stats(W._windows["base"])
+    assert med == 0.5 and mad is not None and mad > 0
+    normal = norm_tx({**TX, "value": hex(int(0.5 * 10**18))})
+    raro = norm_tx({**TX, "value": hex(int(5 * 10**18))})
+    _, f_normal = analyze_tx(normal, med, mad)
+    s_raro, f_raro = analyze_tx(raro, med, mad)
+    assert f_normal == []
+    assert any("estadistico" in x for x in f_raro)
+    assert s_raro >= 20
+
+
+def test_sin_baseline_no_hay_outlier_estadistico():
+    """Con menos de 30 muestras no se afirma nada: el detector se abstiene."""
+    W._windows.clear()
+    for v in [0.1, 0.2, 0.3] * 5:
+        W._windows["ethereum"].append(v)
+    med, mad = W.window_stats(W._windows["ethereum"])
+    assert med is None and mad is None
+    raro = norm_tx({**TX, "value": hex(int(5 * 10**18))})
+    _, flags = analyze_tx(raro, med, mad)
+    assert not any("estadistico" in f for f in flags)
+
+
+def test_z_robusto_resiste_outliers_previos():
+    """Un movimiento gigante no debe romper la escala de los siguientes."""
+    base = [0.4, 0.5, 0.5, 0.6] * 10
+    limpio = robust_z(0.5, statistics.median(base), statistics.median([abs(v - 0.5) for v in base]))
+    contaminado = base + [5000.0]
+    con_outlier = robust_z(0.5, statistics.median(contaminado),
+                           statistics.median([abs(v - statistics.median(contaminado)) for v in contaminado]))
+    assert abs(limpio) < 2
+    assert abs(con_outlier) < 2  # la mediana y el MAD no se mueven
+
+
+def test_scan_expone_detectores_y_baseline(monkeypatch):
+    monkeypatch.setattr(W, "get_latest_block", lambda chain: 5)
+    monkeypatch.setattr(W, "get_block", lambda chain, n, full=True: {"timestamp": "0x1", "transactions": [_tx(n)]})
+    W._windows.clear()
+    W._alerted.clear()
+    r = scan("ethereum", since=4, max_blocks=1)
+    assert "mad-z-robusto" in r["detectors"]
+    assert "baseline_samples" in r
