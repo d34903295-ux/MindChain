@@ -34,12 +34,21 @@ def test_permite_hasta_el_tope_y_encola_el_resto():
 
     t = threading.Thread(target=espera, daemon=True)
     t.start()
-    time.sleep(0.3)
-    assert encolado.is_set() is False, "no debe entrar mientras hay slots ocupados"
-    for h in holders:
-        h.__exit__()
-    t.join(5)
-    assert encolado.is_set() is True, "debe entrar en cuanto se libera un slot"
+    try:
+        time.sleep(0.3)
+        assert encolado.is_set() is False, "no debe entrar mientras hay slots ocupados"
+        for h in holders:
+            h.__exit__()
+        # join con margen: si el hilo se queda vivo entra en el test siguiente
+        # y sus liberaciones de slot corrompen los contadores globales
+        t.join(20)
+        assert not t.is_alive(), "el hilo debe terminar antes de seguir"
+        assert encolado.is_set() is True, "debe entrar en cuanto se libera un slot"
+    finally:
+        for h in holders:
+            h.__exit__()
+        liberado.set()
+        t.join(20)
 
 
 def test_429_lleva_retry_after():

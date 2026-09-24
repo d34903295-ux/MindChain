@@ -684,6 +684,20 @@ img {
   opacity: 0.6;
 }
 
+/* ---------- Nota de IA ---------- */
+.ai-note {
+  margin: 0.625rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--muted);
+  border-inline-start: 2px solid var(--line);
+  padding-inline-start: 0.625rem;
+}
+.ai-note strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
 /* ---------- Watchlist ---------- */
 .wl-form {
   display: flex;

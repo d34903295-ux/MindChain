@@ -342,12 +342,51 @@ def analyze_contract(address, fetched):
     perms = sorted(set(f["id"] for f in findings if f["origin"] in ("source", "bytecode")))
     perms.append("proxy") if proxy else None
     lvl = "bajo" if score < 30 else ("medio" if score < 70 else "alto")
-    expl = ("Contrato " + address + ": bytecode de " + str(fetched.get("code_size_bytes")) + " bytes, "
+    deterministic = ("Contrato " + address + ": bytecode de " + str(fetched.get("code_size_bytes")) + " bytes, "
             + ("verificado" if fetched.get("verified") else "NO verificado") + " (" + str(fetched.get("verified_via")) + "). "
             + "Riesgo " + lvl + " (" + str(score) + "/100). "
             + ("Hallazgos: " + "; ".join(f["id"] + " (" + str(f["weight"]) + ")" for f in findings) + "." if findings else "Sin permisos peligrosos detectados."))
+    expl, ai = _explain_contract(address, findings, score, lvl, proxy, proxy_method, fetched, deterministic)
     return {"address": address, "is_contract": True, "account_type": "contract", "verified": fetched.get("verified"),
             "verified_via": fetched.get("verified_via"), "code_size_bytes": fetched.get("code_size_bytes"),
             "is_proxy": proxy, "proxy_detection": proxy_method, "permissions": perms, "risks": findings,
-            "risk_score": score, "explanation": expl,
+            "risk_score": score, "explanation": expl, "ai": ai,
             "slither_used": used, "source_origin": fetched.get("source_origin")}
+
+
+CONTRACT_SYSTEM = (
+    "Eres un auditor de smart contracts. Explicas hallazgos técnicos en lenguaje claro "
+    "para quien hace due diligence.\n"
+    "REGLAS INNEGOCIABLES:\n"
+    "- Explica SOLO los hallazgos que se te dan. No añadas riesgos nuevos, no los omitas.\n"
+    "- No afirmes intención ni responsabilidad penal de nadie.\n"
+    "- Si no hay hallazgos, dilo claramente en una frase.\n"
+    "- No inventes funciones, privilegios o comportamientos que no estén listados.\n"
+    "Responde en español, máximo 6 líneas."
+)
+
+
+def _explain_contract(address, findings, score, lvl, proxy, proxy_method, fetched, deterministic) -> tuple[str, dict]:
+    """Redacta los hallazgos con IA sin poder inventar nada nuevo."""
+    from . import llm
+    if not findings:
+        return deterministic, {"source": "determinista", "motivo": "sin hallazgos que explicar"}
+    lista = "\n".join(
+        f"- {f['id']} (peso {f.get('weight', 0)}, origen {f.get('origin', '?')}): {f.get('message', '')}"
+        for f in findings
+    )
+    user = (
+        f"Contrato: {address}\n"
+        f"Tamaño de bytecode: {fetched.get('code_size_bytes')} bytes\n"
+        f"Verificado en el explorador: {fetched.get('verified')} ({fetched.get('verified_via')})\n"
+        f"Es proxy: {proxy} ({proxy_method or 'sin determinar'})\n"
+        f"Slither ejecutado: {fetched.get('slither_used', False)}\n"
+        f"Riesgo heurístico total: {score}/100 ({lvl})\n"
+        f"Hallazgos detectados:\n{lista}\n\n"
+        "Explica en español qué significa este contrato para quien va a interactuar con él: "
+        "qué permisos tiene, qué debería comprobar y qué limitaciones tiene este análisis "
+        "(Slither no pudo ejecutarse, fuente no verificada, etc.)."
+    )
+    res = llm.explain_with_llm(CONTRACT_SYSTEM, user, deterministic, max_tokens=420,
+                               temperature=0.15, purpose="contract", score=score)
+    return res["text"], {k: v for k, v in res.items() if k != "text"}

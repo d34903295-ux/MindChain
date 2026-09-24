@@ -62,6 +62,7 @@ class work:
         self.workload = workload
         self.key = f"{workload}:{key}" if key is not None else None
         self._held = False
+        self._queued = False
 
     def reuse(self):
         """Devuelve el resultado anterior si sigue fresco; None si hay que trabajar."""
@@ -87,17 +88,24 @@ class work:
             if _slots[self.workload] + _queue[self.workload] >= MAX_CONCURRENCY + QUEUE_MAX:
                 raise Busy(self.workload, _slots[self.workload] + _queue[self.workload])
             _queue[self.workload] += 1
+            self._queued = True
         deadline = time.time() + 30  # si la cola se atasca, se libera igual
         while True:
             with _lock:
                 if _slots[self.workload] < MAX_CONCURRENCY:
-                    _queue[self.workload] -= 1
+                    if self._queued:
+                        _queue[self.workload] -= 1
+                        self._queued = False
                     _slots[self.workload] += 1
                     self._held = True
                     return self
             if time.time() > deadline:
                 with _lock:
-                    _queue[self.workload] -= 1
+                    # solo se descuenta lo que este objeto encoló: si otra
+                    # instancia ya lo liberó, aquí aparecería un negativo
+                    if self._queued:
+                        _queue[self.workload] -= 1
+                        self._queued = False
                 raise Busy(self.workload, _slots[self.workload])
             time.sleep(0.1)
 
@@ -105,6 +113,7 @@ class work:
         if self._held:
             with _lock:
                 _slots[self.workload] -= 1
+            self._held = False
         return False
 
 

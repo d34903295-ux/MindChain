@@ -1,6 +1,18 @@
-import asyncio
-import contextlib
 import os
+import pathlib
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+# `.env` estaba en requirements pero nunca se cargaba: escribirlo no hacía nada.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env", override=False)
+except Exception:
+    pass
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +26,7 @@ from app.routers.status import router as status_router
 from app.routers.obsidian import router as obsidian_router
 from app.routers.watchlist_router import router as watchlist_router
 
-app = FastAPI(title="ChainMind API", version="0.9.0-sentinel")
+app = FastAPI(title="ChainMind API", version="0.10.0-ia")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(analyze_router)
 app.include_router(contract_router)
@@ -30,10 +42,6 @@ app.include_router(watchlist_router)
 @app.on_event("startup")
 def _startup():
     """Arranca el centinela de vigilancia si está habilitado."""
-    import sys, pathlib
-    root = pathlib.Path(__file__).resolve().parents[2]
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
     try:
         from agents import sentinel
         sentinel.start()

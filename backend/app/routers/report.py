@@ -10,7 +10,7 @@ from agents.fetcher import fetch_wallet_data
 from agents.wallet_intelligence import build_profile
 from agents.risk_scoring import score_wallet
 from agents.explanation import explain
-from agents.investigation import trace_from_txs, neo4j_expand, build_edges
+from agents.investigation import trace_from_txs, neo4j_expand, build_edges, narrarize_trace
 from agents.report_agent import build_case_markdown
 
 router = APIRouter()
@@ -46,6 +46,9 @@ def investigate(payload: dict):
                       "value_usd": e["value_usd"], "time": "", "block": None} for e in extra["edges"]]
     trace = trace_from_txs(address, txs, max_depth=max(1, min(depth, 5)), direction=direction)
     trace["neo4j"] = extra.get("source")
+    narr = narrarize_trace(trace)
+    trace["narrative"] = narr["narrative"]
+    trace["ai"] = narr["ai"]
     return trace
 
 @router.get("/report/{address}")

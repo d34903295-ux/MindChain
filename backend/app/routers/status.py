@@ -16,6 +16,7 @@ if str(ROOT / "backend") not in sys.path:
     sys.path.insert(0, str(ROOT / "backend"))
 
 from agents import price, sentinel, watchlist
+from agents import llm
 from agents.chains import supported
 from agents.fetcher import cache_stats
 from app.guard import stats as guard_stats
@@ -53,6 +54,7 @@ def status():
         "watchlist": watchlist.info(),
         "fetch_cache": cache_stats(),
         "guard": guard_stats(),
+        "ia": llm.status(),
         "sentinel": sentinel.status(),
         "anomaly_job": latest_anomaly_job(),
     }

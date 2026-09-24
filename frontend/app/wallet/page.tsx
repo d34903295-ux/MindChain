@@ -4,6 +4,15 @@ import { useState } from "react";
 import { Chip, CopyButton, RiskGauge, Skeleton, Stat, riskTone } from "../../components/ui";
 import { ObsidianExport } from "../../components/ObsidianExport";
 
+type AiInfo = {
+  source?: "llm" | "determinista";
+  provider?: string;
+  model?: string;
+  motivo?: string;
+  latency_s?: number;
+  cached?: boolean;
+};
+
 type Report = {
   address: string;
   chain: string;
@@ -11,6 +20,7 @@ type Report = {
   risk_score: number | null;
   risk_factors: string[];
   explanation: string;
+  ai?: AiInfo;
   elapsed_s?: number;
   source?: string;
   cached?: boolean;
@@ -91,7 +101,8 @@ export default function WalletPage() {
             </button>
           </div>
           <p className="form-hint">
-            Dato público de la cadena: no se envía a terceros ni se guarda fuera de tu máquina.
+            Dato público de la cadena: no se guarda fuera de tu máquina. La IA que redacta la
+            explicación se indica en cada respuesta (campo <code>ai</code>).
           </p>
         </form>
 
@@ -182,6 +193,27 @@ export default function WalletPage() {
 
           <h3>Explicación</h3>
           <p className="explainer">{res.explanation}</p>
+          {res.ai && (
+            <p className="ai-note">
+              {res.ai.source === "llm" ? (
+                <>
+                  Redactado por{" "}
+                  <strong>
+                    {res.ai.provider}
+                    {res.ai.model ? ` · ${res.ai.model}` : ""}
+                  </strong>
+                  {res.ai.latency_s ? ` en ${res.ai.latency_s}s` : ""}
+                  {res.ai.cached ? " (respuesta en caché)" : ""}. El texto pasa un filtro que
+                  descarta acusaciones e invenciones antes de mostrarse.
+                </>
+              ) : (
+                <>
+                  Texto determinista, sin IA: {res.ai.motivo}. Se usa cuando no hay proveedor
+                  disponible o cuando la respuesta del modelo no supera el filtro.
+                </>
+              )}
+            </p>
+          )}
         </section>
       )}
     </main>

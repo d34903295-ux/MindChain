@@ -9,7 +9,7 @@ from agents.chains import get_chain
 from agents.fetcher import fetch_wallet_data
 from agents.wallet_intelligence import build_profile
 from agents.risk_scoring import score_wallet
-from agents.explanation import explain
+from agents.explanation import explain, explain_detailed
 from agents.alerts import alert_if_risky
 
 router = APIRouter()
@@ -51,7 +51,8 @@ def _analyze_wallet(payload: AnalyzeRequest) -> dict:
     fetched = fetch_wallet_data(payload.address, chain=payload.chain)
     profile, txs = build_profile(payload.address, fetched)
     score, factors = score_wallet(profile, txs)
-    text = explain(profile, score, factors)
+    det = explain_detailed(profile, score, factors)
+    text = det["explanation"]
     elapsed = round(time.time() - t0, 2)
     dq = fetched.get("data_quality", {})
     if score is None:
@@ -63,6 +64,7 @@ def _analyze_wallet(payload: AnalyzeRequest) -> dict:
             "risk_score": None,
             "risk_factors": factors,
             "explanation": text,
+            "ai": det.get("ai"),
             "elapsed_s": elapsed,
             "source": fetched.get("source"),
             "cached": bool(fetched.get("cached")),
@@ -92,6 +94,7 @@ def _analyze_wallet(payload: AnalyzeRequest) -> dict:
     })
     return {"address": payload.address, "chain": payload.chain.lower(), "profile": profile,
             "risk_score": score, "risk_factors": factors, "explanation": text,
+            "ai": det.get("ai"),
             "elapsed_s": elapsed, "source": fetched.get("source"),
             "cached": bool(fetched.get("cached")), "data_quality": dq,
             "alert": alert, "obsidian": obsidian_res}

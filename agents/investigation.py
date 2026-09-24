@@ -129,3 +129,64 @@ def neo4j_expand(address, max_depth=2, limit=100):
         return {"source": "neo4j", "edges": edges[:limit]}
     except Exception as e:
         return {"source": "neo4j-error", "error": str(e)[:200], "edges": []}
+
+
+TRACE_SYSTEM = (
+    "Eres un analista de trazabilidad de fondos. Describes grafos de transacciones.\n"
+    "REGLAS INNEGOCIABLES:\n"
+    "- Describe SOLO lo que aparece en el grafo. No inventes nodos, rutas ni importes.\n"
+    "- No afirmes intención ni responsabilidad penal de ninguna dirección.\n"
+    "- Señalar una coincidencia con una lista de screening no es una acusación: es un punto de partida.\n"
+    "- Si el grafo está incompleto, dilo: el trazado solo cubre las transacciones disponibles.\n"
+    "Responde en español, máximo 6 líneas."
+)
+
+
+def _fallback_narrative(trace: dict) -> str:
+    """Resumen determinista: siempre disponible, nunca inventado."""
+    lineas = [
+        f"Trazado desde {trace.get('start', 'n/d')}: {trace.get('n_paths', 0)} rutas, "
+        f"{trace.get('n_nodes', 0)} direcciones, {trace.get('total_traced_usd', 0)} USD en juego. "
+        f"Cobertura: máximo {trace.get('max_depth', '?')} saltos en dirección {trace.get('direction', 'out')}. "
+        "El trazado solo incluye las transacciones disponibles, no el histórico completo."
+    ]
+    marcados = trace.get("watchlist_nodes") or []
+    if marcados:
+        lineas.append(
+            "Coincidencias con la watchlist (señal de screening, no veredicto): "
+            + "; ".join(f"{m['address']} ({m['label']})" for m in marcados[:5]) + "."
+        )
+    else:
+        lineas.append("Ninguna dirección del trazado aparece en la watchlist.")
+    return " ".join(lineas)
+
+
+def narrarize_trace(trace: dict) -> dict:
+    """Explica el trazado con IA sin poder inventar nodos ni importes.
+
+    `trace` sale de `trace_from_txs()`, así que todo lo que se le da al modelo
+    es lo que el BFS encontró de verdad. La validación de `agents.llm` es la
+    misma que en el resto de agentes.
+    """
+    from . import llm
+    fallback = _fallback_narrative(trace)
+    paths = trace.get("paths") or []
+    if not paths:
+        return {"narrative": fallback, "ai": {"source": "determinista", "motivo": "sin rutas que explicar"}}
+    muestras = [
+        " → ".join(p[:5]) + (f" (valor {v} USD)" if i < len(trace.get("path_values_usd") or []) else "")
+        for i, (p, v) in enumerate(zip(paths[:5], trace.get("path_values_usd") or []))
+    ]
+    user = (
+        f"Dirección inicial: {trace.get('start')}\n"
+        f"Rutas encontradas: {trace.get('n_paths')} · nodos: {trace.get('n_nodes')} · "
+        f"total trazado: {trace.get('total_traced_usd')} USD\n"
+        f"Coincidencias con watchlist: {len(trace.get('watchlist_nodes') or [])}\n"
+        "Primeras rutas:\n" + "\n".join(f"- {m}" for m in muestras) + "\n\n"
+        "Explica en español qué patrón muestran estas rutas, qué conviene mirar a "
+        "continuación y qué limitaciones tiene este trazado. No concluyas nada que no "
+        "salga de los datos."
+    )
+    res = llm.explain_with_llm(TRACE_SYSTEM, user, fallback, max_tokens=380,
+                               temperature=0.15, purpose="investigation")
+    return {"narrative": res["text"], "ai": {k: v for k, v in res.items() if k != "text"}}

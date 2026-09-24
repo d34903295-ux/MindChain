@@ -107,40 +107,69 @@ def _fallback(profile: dict, score: int | None, factors: list[str]) -> str:
     return base + " Factores: " + "; ".join(_factor_text(f) for f in factors) + ". " + DISCLAIMERS
 
 
+SYSTEM_PROMPT = (
+    "Eres un analista on-chain. Explicas señales de riesgo de forma neutra y factual.\n"
+    "REGLAS INNEGOCIABLES:\n"
+    "- No afirmes ni insinúes responsabilidad penal ni intención deliberada.\n"
+    "- No uses palabras como delito, fraude, culpable ni money laundering, ni\n"
+    "  siquiera como hipótesis o advertencia.\n"
+    "- No inventes datos que no estén en el perfil. Si no está, no lo menciones.\n"
+    "- Una heurística es una señal para investigar, nunca un veredicto.\n"
+    "- Si los datos son insuficientes, dilo: no rellenes.\n"
+    "Responde en español claro, 4-6 líneas, terminando con la idea de que hay que "
+    "confirmar on-chain antes de actuar."
+)
+
+
+def _safe_profile(profile: dict) -> str:
+    """Perfil para el prompt: sin volcar campos de control ni datos ajenos."""
+    permitidos = (
+        "address", "chain", "tx_count", "tx_count_reliable", "age_days", "first_seen",
+        "last_seen", "sample_size", "sample_confidence", "activity", "type", "labels",
+        "balance_eth", "balance_usd", "eth_price_usd", "counterparties", "in_count",
+        "out_count", "in_eth", "out_eth", "fees_eth", "is_bot", "is_contract",
+        "insufficient_data", "data_quality", "data_errors",
+    )
+    limpio = {k: profile[k] for k in permitidos if k in profile}
+    return json.dumps(limpio, ensure_ascii=False, default=str)[:1800]
+
+
+def _wallet_prompt(profile: dict, score: int | None, factors: list[str]) -> str:
+    readable = "; ".join(_factor_text(f) for f in factors) or "sin factores"
+    return (
+        f"Wallet {profile.get('address')} ({profile.get('chain', 'ethereum')}).\n"
+        f"Perfil: {_safe_profile(profile)}\n"
+        f"Score heurístico: {score}/100.\n"
+        f"Factores: {readable}.\n"
+        f"Confianza de la muestra: {profile.get('sample_confidence', 'n/d')}.\n"
+        "Explica qué significa este patrón, qué conviene verificar on-chain y qué "
+        "limitaciones tiene el score. No adelantes conclusiones que no salen de los datos."
+    )
+
+
 def explain(profile: dict, score: int | None, factors: list[str]) -> str:
-    key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not key or score is None:
+    """Explicación del score. Usa un LLM real si hay uno disponible.
+
+    Sin proveedor, con score `None` o si la salida del modelo no supera la
+    validación, devuelve siempre el texto determinista: el usuario nunca ve una
+    alucinación ni una acusación.
+    """
+    from . import llm
+    if score is None:
         return _fallback(profile, score, factors)
-    try:
-        readable = "; ".join(_factor_text(f) for f in factors) or "sin factores"
-        payload = {
-            "model": MODEL,
-            "max_tokens": 320,
-            "system": (
-                "Eres analista on-chain. Explicas riesgo de forma neutra y factual, "
-                "sin acusar delitos ni afirmar intenciones. Responde en español claro. "
-                "Una heurística es una señal para investigar, nunca un veredicto."
-            ),
-            "messages": [{
-                "role": "user",
-                "content": (
-                    f"Wallet {profile.get('address')} ({profile.get('chain', 'ethereum')}). "
-                    f"Perfil: {json.dumps(profile, ensure_ascii=False)[:1400]}. "
-                    f"Score {score}/100. Factores: {readable}. "
-                    f"Confianza de la muestra: {profile.get('sample_confidence', 'n/d')}. "
-                    "Explica en 4-6 líneas qué significa y qué conviene verificar."
-                ),
-            }],
-        }
-        req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01"},
-        )
-        with urllib.request.urlopen(req, timeout=10) as r:
-            d = json.load(r)
-        parts = d.get("content", [])
-        txt = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
-        return txt or _fallback(profile, score, factors)
-    except Exception:
-        return _fallback(profile, score, factors)
+    res = llm.explain_with_llm(SYSTEM_PROMPT, _wallet_prompt(profile, score, factors),
+                               _fallback(profile, score, factors), max_tokens=420,
+                               temperature=0.2, purpose="explanation", score=score)
+    return res["text"]
+
+
+def explain_detailed(profile: dict, score: int | None, factors: list[str]) -> dict:
+    """Como `explain()` pero devuelve la trazabilidad: qué IA respondió y por qué."""
+    from . import llm
+    if score is None:
+        return {"explanation": _fallback(profile, score, factors),
+                "ai": {"source": "determinista", "motivo": "sin score no hay nada que explicar"}}
+    res = llm.explain_with_llm(SYSTEM_PROMPT, _wallet_prompt(profile, score, factors),
+                               _fallback(profile, score, factors), max_tokens=420,
+                               temperature=0.2, purpose="explanation", score=score)
+    return {"explanation": res["text"], "ai": {k: v for k, v in res.items() if k != "text"}}
