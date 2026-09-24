@@ -31,7 +31,7 @@ export default function Home() {
       <input value={addr} onChange={e => setAddr(e.target.value)} placeholder="0x..." style={{ flex: 1, padding: 10, fontFamily: "monospace" }} />
       <button onClick={analyze} disabled={loading} style={{ padding: "10px 18px", fontWeight: 700 }}>{loading ? "..." : "Analizar"}</button>
     </div>
-    <p style={{ fontSize: 13 }}><a href="/contract">Analizar contrato</a>{res && <> · <a href={"http://localhost:8000/report/" + res.address + "?chain=" + chain} target="_blank" rel="noreferrer">Descargar reporte .md</a></>}</p>
+    <p style={{ fontSize: 13 }}><a href="/contract">Analizar contrato</a> · <a href="/watch">Vigilancia en vivo</a>{res && <> · <a href={"http://localhost:8000/report/" + res.address + "?chain=" + chain} target="_blank" rel="noreferrer">Descargar reporte .md</a></>}</p>
     {err && <p style={{ color: "red" }}>{err}</p>}
     {res && (<section style={{ marginTop: 20, border: "1px solid #ddd", borderRadius: 12, padding: 18 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
