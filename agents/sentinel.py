@@ -80,11 +80,17 @@ def run_cycle() -> dict:
             feed = watcher.scan(chain, since=since, max_blocks=1)
             state["last_block"][chain] = feed.get("latest")
             new_alerts = feed.get("new_alerts") or []
+            digest = {}
+            try:
+                digest = obsidian.sync_daily_digest(feed)
+            except Exception as e:
+                digest = {"written": False, "reason": str(e)[:60]}
             result["chains"][chain] = {
                 "latest": feed.get("latest"),
                 "txs": feed.get("n_txs"),
                 "alerts": feed.get("n_alerts"),
                 "new": len(new_alerts),
+                "digest": bool(digest.get("written")),
             }
             if len(new_alerts) >= MIN_NEW_ALERTS:
                 last_sent = state.get("_cooldown", {}).get(chain, 0)

@@ -357,33 +357,128 @@ def sync_alert(tx: dict, chain: str = "ethereum") -> dict:
     return write_note(note, meta, body)
 
 
+def _daily_state_path(day: str) -> pathlib.Path:
+    """Acumulador del día. Vive fuera del vault: es estado interno, no nota."""
+    root = pathlib.Path(__file__).resolve().parent.parent / "reports"
+    return root / f"daily-{day}.json"
+
+
+def _load_daily_state(day: str) -> dict:
+    path = _daily_state_path(day)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("chains"), dict):
+            return data
+    except Exception:
+        pass
+    return {"day": day, "sweeps": 0, "updated_at": None, "chains": {}}
+
+
+def _save_daily_state(state: dict) -> None:
+    path = _daily_state_path(state["day"])
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        pass
+
+
+def accumulate_sweep(feed: dict) -> dict:
+    """Acumula un barrido del watcher en el resumen del día.
+
+    El digest se llama "diario" pero antes se sobrescribía en cada barrido:
+    con el centinela cada 60 s la nota solo mostraba el último minuto. Aquí se
+    mergea por hash (idempotente) y se cuentan barridos, alertas y volumen,
+    así que la nota cuenta el día completo aunque el proceso se reinicie.
+    """
+    day = datetime.date.today().isoformat()
+    state = _load_daily_state(day)
+    chain = str(feed.get("chain") or "desconocida")
+    c = state["chains"].setdefault(chain, {
+        "sweeps": 0, "txs": 0, "alerts": 0, "volume_eth": 0.0,
+        "latest": None, "median_eth": None, "mad_eth": None,
+        "baseline_samples": 0, "detectors": [], "alerts_seen": [], "top": [],
+    })
+    c["sweeps"] += 1
+    c["txs"] += int(feed.get("n_txs") or 0)
+    c["alerts"] += int(feed.get("n_alerts") or 0)
+    c["detectors"] = list(feed.get("detectors") or c.get("detectors") or [])
+    c["volume_eth"] = round(c.get("volume_eth", 0.0) + sum(float(t.get("value_eth") or 0) for t in (feed.get("txs") or [])), 4)
+    c["latest"] = max(int(c.get("latest") or 0), int(feed.get("latest") or 0))
+    if feed.get("median_eth") is not None:
+        c["median_eth"] = feed.get("median_eth")
+        c["mad_eth"] = feed.get("mad_eth")
+        c["baseline_samples"] = feed.get("baseline_samples") or 0
+    vistos = {a["hash"] for a in c["alerts_seen"]}
+    for t in (feed.get("alerts") or []):
+        h = str(t.get("hash") or "")
+        if h and h in vistos:
+            continue
+        vistos.add(h)
+        c["alerts_seen"].append({
+            "hash": h, "from": t.get("from"), "value_eth": t.get("value_eth"),
+            "score": t.get("score"), "flags": t.get("flags") or [], "block": t.get("block"),
+        })
+    c["alerts_seen"] = sorted(c["alerts_seen"], key=lambda a: (a.get("score") or 0), reverse=True)[:50]
+    top = {str(t.get("hash")): t for t in c["top"] if t.get("hash")}
+    for t in (feed.get("txs") or []):
+        top.setdefault(str(t.get("hash")), {
+            "from": t.get("from"), "to": t.get("to"),
+            "value_eth": t.get("value_eth"), "score": t.get("score"),
+        })
+    c["top"] = sorted(top.values(), key=lambda t: float(t.get("value_eth") or 0), reverse=True)[:10]
+    state["sweeps"] += 1
+    state["updated_at"] = _now()
+    _save_daily_state(state)
+    return state
+
+
 def sync_daily_digest(feed: dict) -> dict:
-    """Resumen diario: convierte un feed del watcher en una nota viva del vault."""
+    """Resumen diario acumulado: todas las alertas del día, no solo el último barrido."""
     root = vault_root()
     if root is None:
         return {"written": False, "reason": "sin-vault-configurado"}
     day = datetime.date.today().isoformat()
+    state = accumulate_sweep(feed)
+    chains = state["chains"]
+    total_alerts = sum(len(c.get("alerts_seen") or []) for c in chains.values())
     note = root / "daily" / f"{day}.md"
-    alerts = (feed.get("alerts") or [])
-    top = (feed.get("txs") or [])[:10]
+    plural = "alerta distinta" if total_alerts == 1 else "alertas distintas"
     lines = [
         f"## Resumen {day}",
-        f"Red: {feed.get('chain')} · bloque {feed.get('latest')} · {feed.get('n_txs')} tx analizadas · "
-        f"{feed.get('n_alerts')} alertas ({feed.get('elapsed_s', '?')}s)",
-        f"Detectores: {', '.join(feed.get('detectors') or [])}",
-        f"Mediana de la red: {feed.get('median_eth')} ETH · MAD: {feed.get('mad_eth')} · "
-        f"muestra base: {feed.get('baseline_samples')}",
+        f"{state['sweeps']} barridos · {sum(c['txs'] for c in chains.values())} transacciones analizadas · "
+        f"{total_alerts} {plural}",
         "",
-        "## Alertas",
+        "## Por red",
     ]
-    lines += [f"- [[{safe_name(t.get('from'))}]] · {t.get('value_eth')} ETH · score {t.get('score')} · "
-              f"{', '.join(flag_text(f) for f in (t.get('flags') or [])) or '—'}" for t in alerts[:20]] or ["- Sin alertas en este barrido"]
+    for name, c in sorted(chains.items()):
+        n_alertas = len(c.get("alerts_seen") or [])
+        lines.append(
+            f"- **{name}**: bloque {c.get('latest')} · {c['sweeps']} barridos · {c['txs']} tx · "
+            f"{n_alertas} {'alerta' if n_alertas == 1 else 'alertas'} · volumen {c.get('volume_eth', 0)} ETH"
+            + (f" · mediana {c['median_eth']} ETH (MAD {c.get('mad_eth')}, base {c.get('baseline_samples')})"
+               if c.get("median_eth") is not None else "")
+            + (f" · detectores: {', '.join(c.get('detectors') or [])}" if c.get("detectors") else "")
+        )
+    lines += ["", "## Alertas del día"]
+    alerts = [a for c in chains.values() for a in (c.get("alerts_seen") or [])]
+    lines += [
+        f"- [[{safe_name(a.get('from'))}]] · {a.get('value_eth')} ETH · score {a.get('score')} · "
+        f"{', '.join(flag_text(f) for f in (a.get('flags') or [])) or '—'}"
+        for a in sorted(alerts, key=lambda a: (a.get("score") or 0), reverse=True)[:20]
+    ] or ["- Sin alertas registradas hoy"]
     lines += ["", "## Movimientos destacados"]
-    lines += [f"- [[{safe_name(t.get('from'))}]] → {t.get('to') or '∅ contrato'} · {t.get('value_eth')} ETH · "
-              f"score {t.get('score')}" for t in top]
-    lines += ["", "---", f"Generado automáticamente por ChainMind. {len(alerts)} alertas en este barrido."]
-    meta = {"cm_schema": SCHEMA_VERSION, "cm_kind": "daily", "cm_chain": feed.get("chain"),
-            "cm_last_analyzed": _now(), "tags": ["chainmind", "diario"]}
+    top = [t for c in chains.values() for t in (c.get("top") or [])]
+    lines += [
+        f"- [[{safe_name(t.get('from'))}]] → {t.get('to') or '∅ contrato'} · {t.get('value_eth')} ETH · score {t.get('score')}"
+        for t in sorted(top, key=lambda t: float(t.get("value_eth") or 0), reverse=True)[:10]
+    ] or ["- Sin movimientos destacados"]
+    lines += ["", "---", f"Actualizado automáticamente por el centinela. Última pasada: {state.get('updated_at')}."]
+    meta = {"cm_schema": SCHEMA_VERSION, "cm_kind": "daily", "cm_last_analyzed": _now(),
+            "cm_tx_count": sum(c["txs"] for c in chains.values()),
+            "tags": ["chainmind", "diario"]}
     return write_note(note, meta, _body(lines))
 
 

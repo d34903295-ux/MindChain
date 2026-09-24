@@ -49,23 +49,25 @@ type Watched = {
 
 const POLL_MS = 12000;
 
+// Textos idénticos a agents/explanation.py::FLAG_TEXT (verificado por test
+// backend/tests/test_labels_sync.py: el mismo hallazgo no puede leerse de dos formas).
 const FLAG_TEXT: Record<string, string> = {
-  creacion_contrato: "crea contrato",
-  gas_alto: "gas alto",
+  creacion_contrato: "crea un contrato nuevo",
+  gas_alto: "gas por encima de lo normal",
   gas_muy_alto: "gas muy alto",
-  payload_grande: "payload grande",
-  "ballena_100eth+": "ballena 100+ ETH",
-  "ballena_1000eth+": "ballena 1.000+ ETH",
+  payload_grande: "payload grande (posible operación compleja)",
+  "ballena_100eth+": "movimiento de 100+ ETH",
+  "ballena_1000eth+": "movimiento de 1.000+ ETH",
 };
 
 function flagLabel(flag: string): string {
   if (FLAG_TEXT[flag]) return FLAG_TEXT[flag];
   if (flag.startsWith("outlier_") && flag.includes("mediana")) {
     const ratio = flag.split("_")[1]?.replace(/x$/, "");
-    return `${ratio}× la mediana`;
+    return `valor ${ratio}× la mediana de la red`;
   }
   if (flag.startsWith("outlier_estadistico_z")) return "outlier estadístico";
-  if (flag.startsWith("watchlist:")) return `watchlist: ${flag.split(":")[1]}`;
+  if (flag.startsWith("watchlist:")) return `interacción con dirección listada (${flag.split(":")[1]})`;
   return flag.replace(/_/g, " ");
 }
 
