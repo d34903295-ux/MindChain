@@ -22,10 +22,45 @@ type Feed = {
   alerts: Tx[];
   n_txs: number;
   n_alerts: number;
+  n_new_alerts?: number;
   elapsed_s: number;
+  median_eth?: number | null;
+  mad_eth?: number | null;
+  baseline_samples?: number;
+  detectors?: string[];
 };
 
+type Sentinel = {
+  enabled: boolean;
+  cycles: number;
+  alerts_delivered: number;
+  last_error: string | null;
+  telegram_configured: boolean;
+};
+
+type Job = { exists: boolean; n_wallets?: number; n_anomalies?: number; generated_at?: string; model?: string };
+
 const POLL_MS = 12000;
+
+const FLAG_TEXT: Record<string, string> = {
+  creacion_contrato: "crea contrato",
+  gas_alto: "gas alto",
+  gas_muy_alto: "gas muy alto",
+  payload_grande: "payload grande",
+  "ballena_100eth+": "ballena 100+ ETH",
+  "ballena_1000eth+": "ballena 1.000+ ETH",
+};
+
+function flagLabel(flag: string): string {
+  if (FLAG_TEXT[flag]) return FLAG_TEXT[flag];
+  if (flag.startsWith("outlier_") && flag.includes("mediana")) {
+    const ratio = flag.split("_")[1]?.replace(/x$/, "");
+    return `${ratio}× la mediana`;
+  }
+  if (flag.startsWith("outlier_estadistico_z")) return "outlier estadístico";
+  if (flag.startsWith("watchlist:")) return `watchlist: ${flag.split(":")[1]}`;
+  return flag.replace(/_/g, " ");
+}
 
 function short(h: string): string {
   if (h.length < 16) return h;
@@ -42,6 +77,18 @@ export default function WatchPage() {
   const [seen, setSeen] = useState(0);
   const [alertTotal, setAlertTotal] = useState(0);
   const sinceRef = useRef<number | null>(null);
+  const [sentinel, setSentinel] = useState<Sentinel | null>(null);
+  const [job, setJob] = useState<Job | null>(null);
+
+  useEffect(() => {
+    fetch("http://localhost:8000/status")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((j) => {
+        setSentinel(j.sentinel ?? null);
+        setJob(j.anomaly_job ?? null);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const load = useCallback(
     async (reset = false) => {
@@ -138,7 +185,29 @@ export default function WatchPage() {
           {feed
             ? `Bloque ${feed.latest} · vigiladas ${seen} · alertas ${alertTotal}`
             : "Conectando con la red…"}
+          {feed?.median_eth != null && (
+            <>
+              {" · "}mediana {feed.median_eth} ETH
+              {feed.mad_eth != null && ` · MAD ${feed.mad_eth}`}
+              {feed.baseline_samples ? ` · base ${feed.baseline_samples}` : " ·PEC"}
+            </>
+          )}
         </p>
+        {sentinel && (
+          <p className="sentinel-line">
+            <span className={sentinel.enabled ? "dot live" : "dot off"} aria-hidden="true" />
+            Centinela {sentinel.enabled ? "activo" : "apagado"}
+            {sentinel.enabled && ` · ${sentinel.cycles} ciclos · ${sentinel.alerts_delivered} entregadas`}
+            {!sentinel.telegram_configured && " · Telegram sin configurar"}
+            {sentinel.last_error && ` · error: ${sentinel.last_error.slice(0, 60)}`}
+          </p>
+        )}
+        {job?.exists && (
+          <p className="sentinel-line">
+            Job nocturno ({job.model}): {job.n_wallets} wallets · {job.n_anomalies} anomalías
+            {job.generated_at ? ` · ${new Date(job.generated_at).toLocaleString("es")}` : ""}
+          </p>
+        )}
       </div>
 
       {err && (
@@ -157,7 +226,8 @@ export default function WatchPage() {
           <ul style={{ margin: "0.5rem 0 0", paddingInlineStart: "1.125rem" }}>
             {feed.alerts.slice(0, 10).map(t => (
               <li key={t.hash} className="mono" style={{ fontSize: "0.8125rem" }}>
-                {short(t.hash)} · {t.value_eth} ETH · score {t.score} · {t.flags.join(", ")}
+                {short(t.hash)} · {t.value_eth} ETH · score {t.score} ·{" "}
+                {t.flags.map(flagLabel).join(", ")}
               </li>
             ))}
           </ul>
@@ -200,7 +270,13 @@ export default function WatchPage() {
                       {t.score}
                     </strong>
                   </td>
-                  <td>{t.flags.length === 0 ? <span style={{ color: "var(--muted)" }}>limpia</span> : t.flags.join(", ")}</td>
+                  <td>
+                    {t.flags.length === 0 ? (
+                      <span style={{ color: "var(--muted)" }}>limpia</span>
+                    ) : (
+                      t.flags.map(flagLabel).join(", ")
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

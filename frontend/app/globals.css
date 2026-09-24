@@ -660,6 +660,30 @@ img {
   margin: 0 0 0.75rem;
 }
 
+/* ---------- Centinela / estado del agente ---------- */
+.sentinel-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.sentinel-line .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+.sentinel-line .dot.live {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-bg);
+}
+.sentinel-line .dot.off {
+  background: var(--muted);
+  opacity: 0.6;
+}
+
 /* ---------- Obsidian ---------- */
 .obsidian-row {
   display: inline-flex;
