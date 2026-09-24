@@ -79,5 +79,20 @@ export function GlyphField() {
     };
   }, []);
 
-  return <canvas ref={ref} className="glyph-field" aria-hidden="true" />;
+  return (
+    <>
+      <div
+        className="hero-spotlight"
+        aria-hidden="true"
+        onMouseMove={e => {
+          const el = e.currentTarget.parentElement;
+          if (!el) return;
+          const r = el.getBoundingClientRect();
+          el.style.setProperty("--hpx", `${((e.clientX - r.left) / r.width) * 100}%`);
+          el.style.setProperty("--hpy", `${((e.clientY - r.top) / r.height) * 100}%`);
+        }}
+      />
+      <canvas ref={ref} className="glyph-field" aria-hidden="true" />
+    </>
+  );
 }

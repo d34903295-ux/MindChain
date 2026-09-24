@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Chip, ScoreBar, riskTone } from "../../components/ui";
+import { Chip, RiskGauge, Skeleton, riskTone } from "../../components/ui";
 
 type Risk = { id: string; weight: number; origin: string; message: string };
 type Rep = {
@@ -57,79 +57,85 @@ export default function ContractPage() {
         </p>
       </header>
 
-      <form onSubmit={go} aria-label="Analizar contrato">
-        <div className="field" style={{ maxWidth: "12rem" }}>
-          <label htmlFor="c-chain">Red</label>
-          <select
-            id="c-chain"
-            className="select"
-            value={chain}
-            onChange={e => setChain(e.target.value)}
-          >
-            <option value="ethereum">Ethereum</option>
-            <option value="base">Base</option>
-          </select>
-        </div>
-        <div className="field" style={{ marginBlockStart: "0.75rem" }}>
-          <label htmlFor="c-addr">Dirección del contrato (0x + 40 caracteres hex)</label>
-          <input
-            id="c-addr"
-            className="input input-mono"
-            value={addr}
-            onChange={e => setAddr(e.target.value)}
-            placeholder="0x…"
-            required
-            minLength={42}
-            maxLength={42}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-        <button type="submit" className="btn" disabled={loading} style={{ marginBlockStart: "0.75rem" }}>
-          {loading ? "Analizando…" : "Analizar contrato"}
-        </button>
-      </form>
+      <section className="card form-card" aria-label="Formulario de análisis">
+        <form onSubmit={go} aria-label="Analizar contrato" aria-busy={loading}>
+          <div className="form-row">
+            <div className="field" style={{ maxWidth: "12rem" }}>
+              <label htmlFor="c-chain">Red</label>
+              <select
+                id="c-chain"
+                className="select"
+                value={chain}
+                onChange={e => setChain(e.target.value)}
+              >
+                <option value="ethereum">Ethereum</option>
+                <option value="base">Base</option>
+              </select>
+            </div>
+            <div className="field" style={{ flex: "1 1 22rem" }}>
+              <label htmlFor="c-addr">Dirección del contrato (0x + 40 hex)</label>
+              <input
+                id="c-addr"
+                className="input input-mono"
+                value={addr}
+                onChange={e => setAddr(e.target.value)}
+                placeholder="0x…"
+                required
+                minLength={42}
+                maxLength={42}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <button type="submit" className="btn" disabled={loading}>
+              {loading ? "Analizando…" : "Analizar contrato"}
+            </button>
+          </div>
+          <p className="form-hint">Funciona con cualquier contrato; el código fuente se consulta si está verificado.</p>
+        </form>
 
-      {err && (
-        <p role="alert" className="error-text">
-          {err}
-        </p>
-      )}
+        {err && (
+          <p role="alert" className="error-text">
+            {err}
+          </p>
+        )}
+        {loading && <Skeleton label="Analizando contrato" />}
+      </section>
 
       {res && (
-        <section aria-live="polite" aria-label="Resultado del contrato" className="card">
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <img
-              src={`http://localhost:8000/qr/${res.address}`}
-              width={96}
-              height={96}
-              alt={`Código QR de la dirección ${res.address}`}
-            />
-            <div>
-              <h2 className="mono" style={{ fontSize: "1rem", margin: 0 }}>
-                {res.address}
-              </h2>
-              <p style={{ color: "var(--muted)", fontSize: "0.875rem", margin: 0 }}>
-                {res.chain} · {res.code_size_bytes} bytes · {res.source_origin} · slither{" "}
-                {res.slither_used ? "sí" : "no"} · {res.elapsed_s}s
+        <section aria-live="polite" aria-label="Resultado del contrato" className="card result-enter">
+          <div className="result-head">
+            <figure className="qr-frame" style={{ margin: 0 }}>
+              <img
+                src={`http://localhost:8000/qr/${res.address}`}
+                width={104}
+                height={104}
+                alt={`Código QR de la dirección ${res.address}`}
+              />
+              <figcaption>QR del contrato</figcaption>
+            </figure>
+            <div className="result-ident">
+              <h2 className="mono result-addr">{res.address}</h2>
+              <p className="result-meta">
+                <span className="chip">{res.chain}</span>
+                <span className="chip">{res.code_size_bytes} bytes</span>
+                <span className="chip">{res.source_origin}</span>
+                <span className="chip">slither {res.slither_used ? "sí" : "no"}</span>
+                <span className="chip">{res.elapsed_s}s</span>
               </p>
-              <p style={{ margin: "0.25rem 0 0" }}>
-                {res.verified ? (
-                  <Chip tone="ok">verificado</Chip>
-                ) : (
-                  <Chip tone="bad">no verificado</Chip>
-                )}{" "}
+              <p className="result-actions">
+                {res.verified ? <Chip tone="ok">verificado</Chip> : <Chip tone="bad">no verificado</Chip>}
                 {!res.is_contract && <Chip tone="warn">no es contrato (EOA)</Chip>}
               </p>
             </div>
           </div>
 
-          <div style={{ marginBlockStart: "1rem" }}>
-            <ScoreBar value={res.risk_score} label="Riesgo" />
+          <div className="result-risk">
+            <RiskGauge value={res.risk_score} label="Riesgo" />
           </div>
 
           <h3>Permisos peligrosos</h3>
-          <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+          <div className="chip-row">
             {res.permissions.length === 0 ? (
               <Chip tone="ok">ninguno detectado</Chip>
             ) : (
@@ -145,10 +151,15 @@ export default function ContractPage() {
           {res.risks.length === 0 ? (
             <p style={{ color: "var(--muted)" }}>Sin hallazgos.</p>
           ) : (
-            <ul>
+            <ul className="findings">
               {[...res.risks].sort((a, b) => b.weight - a.weight).map((x, i) => (
-                <li key={`${x.id}-${i}`} style={{ fontSize: "0.875rem" }}>
-                  <strong>{x.id}</strong> (+{x.weight}) [{x.origin}] — {x.message}
+                <li key={`${x.id}-${i}`}>
+                  <span className="finding-id">{x.id}</span>
+                  <span className="finding-weight" data-tone={riskTone(x.weight * 3)}>
+                    +{x.weight}
+                  </span>
+                  <span className="finding-origin">{x.origin}</span>
+                  <span className="finding-msg">{x.message}</span>
                 </li>
               ))}
             </ul>

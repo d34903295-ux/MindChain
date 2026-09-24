@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GlyphField } from "../components/GlyphField";
 import { OpsCenter } from "../components/OpsCenter";
+import { Magnetic, SplitLines, Spotlight, Stagger, Tilt } from "../components/motion";
 import { Reveal } from "../components/Reveal";
 
 export default function Landing() {
@@ -9,12 +10,17 @@ export default function Landing() {
       <div className="landing-wide">
         <div className="hero-grid hero-stage" style={{ gridTemplateColumns: "1fr", paddingBlockEnd: "0.5rem" }}>
           <GlyphField />
-          <section aria-labelledby="hero" style={{ maxWidth: "46rem" }}>
+          <section aria-labelledby="hero" style={{ maxWidth: "56rem" }}>
             <p className="eyebrow hero-enter">Ethereum · Base · 7 agentes de IA</p>
-            <h1 id="hero" className="hero-title-xl hero-enter hero-enter-1">
-              Un centro de inteligencia
-              <br />
-              blockchain que <span className="accent">nunca duerme.</span>
+            <h1 id="hero" className="display-xl" style={{ marginBlock: "0.75rem 1rem" }}>
+              <SplitLines
+                lines={[
+                  <>Un centro de inteligencia</>,
+                  <>
+                    blockchain que <span className="accent">nunca duerme.</span>
+                  </>,
+                ]}
+              />
             </h1>
             <p className="lede hero-enter hero-enter-2">
               Siete agentes especializados trabajan en paralelo: perfilan wallets, auditan contratos,
@@ -22,9 +28,11 @@ export default function Landing() {
               ellos operan 24/7.
             </p>
             <div className="cta-row hero-enter hero-enter-3">
-              <Link href="/wallet" className="btn">
-                Analizar una wallet
-              </Link>
+              <Magnetic>
+                <Link href="/wallet" className="btn">
+                  Analizar una wallet
+                </Link>
+              </Magnetic>
               <Link href="/watch" className="quiet-link">
                 Ver vigilancia en vivo →
               </Link>
@@ -51,11 +59,13 @@ export default function Landing() {
         </div>
       </div>
 
-      <section className="landing-wide" aria-labelledby="ops-title" style={{ paddingBlockEnd: "1rem" }}>
-        <h2 id="ops-title" className="eyebrow" style={{ textAlign: "center" }}>
+      <section className="landing-wide" aria-labelledby="ops-title" style={{ paddingBlock: "3.5rem 1rem" }}>
+        <h2 id="ops-title" className="eyebrow is-centered">
           La sala de operaciones
         </h2>
-        <OpsCenter />
+        <Tilt max={2.5} className="ops-tilt">
+          <OpsCenter />
+        </Tilt>
       </section>
 
       <div className="landing-wide">
@@ -89,12 +99,12 @@ export default function Landing() {
         </Reveal>
 
         <Reveal label="El pipeline de agentes">
-          <h2 className="eyebrow">Cómo collaborates los agentes</h2>
+          <h2 className="eyebrow">Cómo colaboran los agentes</h2>
           <p className="section-lede">
-            Cada transacción recorre la misma cadena de specialists. Ninguno improvisa: cada uno
+            Cada transacción recorre la misma cadena de especialistas. Ninguno improvisa: cada uno
             entrega un artefacto verificable al siguiente.
           </p>
-          <ol className="pipeline">
+          <Stagger as="ol" className="pipeline">
             <li>
               <span className="pipeline-step">01</span>
               <div>
@@ -144,46 +154,56 @@ export default function Landing() {
                 <p>Único agente con LLM: traduce el score a lenguaje humano, con Claude.</p>
               </div>
             </li>
-          </ol>
+          </Stagger>
         </Reveal>
 
         <Reveal label="Qué obtienes">
           <h2 className="eyebrow">Capacidades</h2>
-          <ul className="bento">
-            <li className="bento-cell bento-live">
-              <span className="bento-kicker">24/7</span>
-              <strong>Vigilancia autónoma</strong>
-              <p>Cada transacción de los últimos bloques, puntuada sola. Alertas sin pedir nada.</p>
-              <p className="bento-link">
-                <Link href="/watch">Abrir vigilancia →</Link>
-              </p>
-            </li>
-            <li className="bento-cell">
-              <span className="bento-kicker">Wallets</span>
-              <strong>Verificar antes de enviar</strong>
-              <p>Mezcladores, bots o concentración de fondos visibles en segundos.</p>
-            </li>
-            <li className="bento-cell">
-              <span className="bento-kicker">Contratos</span>
-              <strong>Auditar bytecode</strong>
-              <p>DELEGATECALL, SELFDESTRUCT, mint privilegiado y pausa centralizada.</p>
-            </li>
-            <li className="bento-cell">
-              <span className="bento-kicker">Casos</span>
-              <strong>Reporte descargable</strong>
-              <p>Markdown con perfil, riesgo, rutas de fondos y explicación.</p>
-            </li>
-            <li className="bento-cell">
-              <span className="bento-kicker">Multi-red</span>
-              <strong>Ethereum y Base</strong>
-              <p>Mismo motor de agentes, sin código duplicado por cadena.</p>
-            </li>
-          </ul>
+          <Stagger as="ul" className="bento">
+            <Spotlight className="bento-cell-wrap">
+              <li className="bento-cell bento-live">
+                <span className="bento-kicker">24/7</span>
+                <strong>Vigilancia autónoma</strong>
+                <p>Cada transacción de los últimos bloques, puntuada sola. Alertas sin pedir nada.</p>
+                <p className="bento-link">
+                  <Link href="/watch">Abrir vigilancia →</Link>
+                </p>
+              </li>
+            </Spotlight>
+            <Spotlight className="bento-cell-wrap">
+              <li className="bento-cell">
+                <span className="bento-kicker">Wallets</span>
+                <strong>Verificar antes de enviar</strong>
+                <p>Mezcladores, bots o concentración de fondos visibles en segundos.</p>
+              </li>
+            </Spotlight>
+            <Spotlight className="bento-cell-wrap">
+              <li className="bento-cell">
+                <span className="bento-kicker">Contratos</span>
+                <strong>Auditar bytecode</strong>
+                <p>DELEGATECALL, SELFDESTRUCT, mint privilegiado y pausa centralizada.</p>
+              </li>
+            </Spotlight>
+            <Spotlight className="bento-cell-wrap">
+              <li className="bento-cell">
+                <span className="bento-kicker">Casos</span>
+                <strong>Reporte descargable</strong>
+                <p>Markdown con perfil, riesgo, rutas de fondos y explicación.</p>
+              </li>
+            </Spotlight>
+            <Spotlight className="bento-cell-wrap">
+              <li className="bento-cell">
+                <span className="bento-kicker">Multi-red</span>
+                <strong>Ethereum y Base</strong>
+                <p>Mismo motor de agentes, sin código duplicado por cadena.</p>
+              </li>
+            </Spotlight>
+          </Stagger>
         </Reveal>
 
         <Reveal label="Cómo se usa" className="reveal steps-section">
           <h2 className="eyebrow">Cómo se usa</h2>
-          <ol className="steps">
+          <Stagger as="ol" className="steps">
             <li>
               <div>
                 <strong>Elige red y objetivo</strong>
@@ -207,7 +227,7 @@ export default function Landing() {
                 </p>
               </div>
             </li>
-          </ol>
+          </Stagger>
         </Reveal>
 
         <Reveal label="Preguntas">
@@ -241,14 +261,14 @@ export default function Landing() {
         </Reveal>
 
         <Reveal label="Llamado final" className="reveal final-cta">
-          <h2>
-            Pega una dirección.
-            <br />
-            Entiende el riesgo.
+          <h2 className="display-l">
+            <SplitLines lines={[<>Pega una dirección.</>, <>Entiende el riesgo.</>]} />
           </h2>
-          <Link href="/wallet" className="btn">
-            Analizar una wallet
-          </Link>
+          <Magnetic>
+            <Link href="/wallet" className="btn">
+              Analizar una wallet
+            </Link>
+          </Magnetic>
         </Reveal>
       </div>
     </main>

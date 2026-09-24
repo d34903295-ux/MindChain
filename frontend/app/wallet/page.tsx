@@ -53,66 +53,77 @@ export default function WalletPage() {
         <p className="eyebrow">Wallet Intelligence</p>
         <h1 className="page-title">Analiza una wallet</h1>
         <p className="section-lede">
-          Perfil, score de riesgo y explicación en menos de 10 segundos. Los agentes Investigator,
+          Perfil, score de riesgo y explicación en menos de 10 segundos. Los agentes Wallet, Research,
           Risk y Explanation trabajan en paralelo.
         </p>
       </header>
 
-      <form onSubmit={analyze} aria-label="Analizar wallet" aria-busy={loading}>
-        <div className="field" style={{ maxWidth: "12rem" }}>
-          <label htmlFor="chain">Red</label>
-          <select id="chain" className="select" value={chain} onChange={e => setChain(e.target.value)}>
-            <option value="ethereum">Ethereum</option>
-            <option value="base">Base</option>
-          </select>
-        </div>
-        <div className="field" style={{ marginBlockStart: "0.75rem" }}>
-          <label htmlFor="addr">Dirección (0x + 40 caracteres hex)</label>
-          <input
-            id="addr"
-            className="input input-mono"
-            value={addr}
-            onChange={e => setAddr(e.target.value)}
-            placeholder="0x…"
-            required
-            minLength={42}
-            maxLength={42}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-        <button type="submit" className="btn" disabled={loading} style={{ marginBlockStart: "0.75rem" }}>
-          {loading ? "Analizando…" : "Analizar"}
-        </button>
-      </form>
+      <section className="card form-card" aria-label="Formulario de análisis">
+        <form onSubmit={analyze} aria-label="Analizar wallet" aria-busy={loading}>
+          <div className="form-row">
+            <div className="field" style={{ maxWidth: "12rem" }}>
+              <label htmlFor="chain">Red</label>
+              <select id="chain" className="select" value={chain} onChange={e => setChain(e.target.value)}>
+                <option value="ethereum">Ethereum</option>
+                <option value="base">Base</option>
+              </select>
+            </div>
+            <div className="field" style={{ flex: "1 1 22rem" }}>
+              <label htmlFor="addr">Dirección (0x + 40 caracteres hex)</label>
+              <input
+                id="addr"
+                className="input input-mono"
+                value={addr}
+                onChange={e => setAddr(e.target.value)}
+                placeholder="0x…"
+                required
+                minLength={42}
+                maxLength={42}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <button type="submit" className="btn" disabled={loading}>
+              {loading ? "Analizando…" : "Analizar"}
+            </button>
+          </div>
+          <p className="form-hint">
+            Dato público de la cadena: no se envía a terceros ni se guarda fuera de tu máquina.
+          </p>
+        </form>
 
-      {err && (
-        <p role="alert" className="error-text">
-          {err}
-        </p>
-      )}
+        {err && (
+          <p role="alert" className="error-text">
+            {err}
+          </p>
+        )}
 
-      {loading && <Skeleton label="Analizando wallet" />}
+        {loading && <Skeleton label="Analizando wallet" />}
+      </section>
 
       {res && (
-        <section aria-live="polite" aria-label="Resultado del análisis" className="card">
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
-            <figure style={{ margin: 0, textAlign: "center" }}>
+        <section aria-live="polite" aria-label="Resultado del análisis" className="card result-enter">
+          <div className="result-head">
+            <figure className="qr-frame" style={{ margin: 0 }}>
               <img
                 src={`http://localhost:8000/qr/${res.address}`}
-                width={96}
-                height={96}
+                width={104}
+                height={104}
                 alt={`Código QR de la dirección ${res.address}`}
               />
-              <figcaption style={{ fontSize: "0.75rem", color: "var(--muted)" }}>QR</figcaption>
+              <figcaption>QR de la wallet</figcaption>
             </figure>
-            <div style={{ flex: "1 1 16rem" }}>
-              <h2 className="mono" style={{ fontSize: "1rem", margin: 0, overflowWrap: "anywhere" }}>
-                {res.address}
-              </h2>
-              <p style={{ color: "var(--muted)", fontSize: "0.875rem", margin: "0.25rem 0" }}>
-                {res.chain} · {res.elapsed_s}s servidor · fuente {res.source} ·{" "}
+            <div className="result-ident">
+              <h2 className="mono result-addr">{res.address}</h2>
+              <p className="result-meta">
+                <span className="chip">{res.chain}</span>
+                <span className="chip">{res.elapsed_s}s</span>
+                <span className="chip">fuente {res.source}</span>
+              </p>
+              <p className="result-actions">
+                <CopyButton text={res.address} label="dirección" />
                 <a
+                  className="btn btn-secondary"
                   href={`http://localhost:8000/report/${res.address}?chain=${chain}`}
                   target="_blank"
                   rel="noreferrer"
@@ -120,13 +131,12 @@ export default function WalletPage() {
                   Descargar reporte .md
                 </a>
               </p>
-              <CopyButton text={res.address} label="dirección" />
             </div>
           </div>
 
-          <div style={{ marginBlockStart: "1rem" }}>
+          <div className="result-risk">
             <RiskGauge value={res.risk_score} label="Riesgo" />
-            <div style={{ marginBlockStart: "0.75rem", display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+            <div className="chip-row">
               {res.risk_factors.length === 0 ? (
                 <Chip tone="ok">sin factores de riesgo</Chip>
               ) : (
