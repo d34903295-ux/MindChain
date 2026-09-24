@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 const LINKS = [
+  { href: "/watch", label: "Vigilancia" },
   { href: "/wallet", label: "Wallet" },
   { href: "/contract", label: "Contrato" },
-  { href: "/watch", label: "Vigilancia" },
 ];
 
 export function SiteHeader() {
@@ -16,7 +16,10 @@ export function SiteHeader() {
     <header className="site-header">
       <nav aria-label="Principal" className="container nav-row">
         <Link href="/" className="brand">
-          ChainMind
+          <span className="brand-mark" aria-hidden="true">
+            CM
+          </span>
+          <span className="brand-name">ChainMind</span>
         </Link>
         <ul className="nav-list">
           {LINKS.map(l => (
@@ -26,6 +29,11 @@ export function SiteHeader() {
               </Link>
             </li>
           ))}
+          <li>
+            <Link href="/watch" className="btn nav-cta">
+              Empezar
+            </Link>
+          </li>
         </ul>
       </nav>
     </header>
@@ -85,7 +93,7 @@ export function Stat({ term, children }: { term: string; children: ReactNode }) 
   );
 }
 
-const ARC = Math.PI * 52;
+const ARC = Math.PI * 56;
 
 export function RiskGauge({ value, label }: { value: number; label: string }) {
   const toneName = riskTone(value);
@@ -99,23 +107,44 @@ export function RiskGauge({ value, label }: { value: number; label: string }) {
       aria-valuemax={100}
       aria-label={label}
     >
-      <svg width="120" height="68" viewBox="0 0 120 68" aria-hidden="true">
-        <path d="M 8 60 A 52 52 0 0 1 112 60" fill="none" stroke="var(--border)" strokeWidth="10" strokeLinecap="round" />
+      <svg width="132" height="76" viewBox="0 0 132 76" aria-hidden="true">
         <path
-          d="M 8 60 A 52 52 0 0 1 112 60"
+          d="M 10 66 A 56 56 0 0 1 122 66"
+          fill="none"
+          stroke="var(--surface)"
+          strokeWidth="11"
+          strokeLinecap="round"
+        />
+        <path
+          d="M 10 66 A 56 56 0 0 1 122 66"
+          fill="none"
+          stroke="var(--border)"
+          strokeWidth="1"
+          strokeDasharray="0"
+        />
+        <path
+          d="M 10 66 A 56 56 0 0 1 122 66"
           fill="none"
           stroke={TONE_VAR[toneName]}
-          strokeWidth="10"
+          strokeWidth="11"
           strokeLinecap="round"
           strokeDasharray={`${(filled * ARC).toFixed(1)} ${ARC.toFixed(1)}`}
         />
+        <text
+          x="66"
+          y="60"
+          textAnchor="middle"
+          fill={TONE_VAR[toneName]}
+          style={{ font: "700 26px var(--font-sans), system-ui, sans-serif" }}
+        >
+          {value}
+        </text>
       </svg>
       <div>
-        <div className="gauge-num" style={{ color: TONE_VAR[toneName] }}>
-          {value}
-          <span style={{ fontSize: "1rem", color: "var(--muted)" }}>/100</span>
+        <div style={{ fontSize: "0.8125rem", fontWeight: 600, letterSpacing: "0.02em" }}>{label}</div>
+        <div style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>
+          {value < 30 ? "Riesgo bajo" : value < 70 ? "Riesgo medio" : "Riesgo alto"} · 0–100
         </div>
-        <div style={{ fontSize: "0.875rem", color: "var(--muted)" }}>{label}</div>
       </div>
     </div>
   );
@@ -135,10 +164,10 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
   return (
     <>
       <button type="button" className="copy-btn" onClick={copy} aria-label={`Copiar ${label}`}>
-        {done ? "Copiado ✓" : "Copiar"}
+        {done ? "Copiado" : "Copiar dirección"}
       </button>
-      <span aria-live="polite" className="mono" style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-        {done ? "copiado al portapapeles" : ""}
+      <span aria-live="polite" className="sr-only">
+        {done ? `${label} copiada al portapapeles` : ""}
       </span>
     </>
   );

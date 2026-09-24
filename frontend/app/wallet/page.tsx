@@ -48,11 +48,15 @@ export default function WalletPage() {
   };
 
   return (
-    <main id="contenido" className="container" style={{ paddingBlock: "1.5rem" }}>
-      <h1>Wallet Intelligence</h1>
-      <p style={{ color: "var(--muted)" }}>
-        Pega una dirección y obtén perfil, score de riesgo y explicación en menos de 10 segundos.
-      </p>
+    <main id="contenido" className="container page">
+      <header className="page-head">
+        <p className="eyebrow">Wallet Intelligence</p>
+        <h1 className="page-title">Analiza una wallet</h1>
+        <p className="section-lede">
+          Perfil, score de riesgo y explicación en menos de 10 segundos. Los agentes Investigator,
+          Risk y Explanation trabajan en paralelo.
+        </p>
+      </header>
 
       <form onSubmit={analyze} aria-label="Analizar wallet" aria-busy={loading}>
         <div className="field" style={{ maxWidth: "12rem" }}>

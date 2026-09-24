@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
@@ -13,13 +13,34 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ChainMind — Inteligencia blockchain",
-  description: "Agentes de IA que vigilan wallets, contratos y transacciones en Ethereum y Base.",
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
-    { media: "(prefers-color-scheme: light)", color: "#fafaf7" },
-  ],
+  metadataBase: new URL("http://localhost:3000"),
+  title: {
+    default: "ChainMind — Inteligencia blockchain operada por IA",
+    template: "%s · ChainMind",
+  },
+  description:
+    "Siete agentes de IA vigilan wallets, contratos y transacciones en Ethereum y Base. Perfil, score de riesgo y reporte en menos de 10 segundos.",
+  applicationName: "ChainMind",
+  keywords: ["blockchain intelligence", "anomalías", "Ethereum", "Base", "agents IA", "on-chain"],
+  openGraph: {
+    type: "website",
+    locale: "es_ES",
+    title: "ChainMind — Inteligencia blockchain operada por IA",
+    description:
+      "Monitoring, Transaction, Wallet, Contract, Risk, Research y Explanation trabajando 24/7 sobre la cadena.",
+    siteName: "ChainMind",
+  },
   icons: { icon: "/icon.svg" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0b0d12" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -35,26 +56,33 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="container footer-grid">
             <div>
               <h2>ChainMind</h2>
-              <p style={{ margin: "0.5rem 0 0" }}>
-                Análisis heurístico automatizado. Verificar on-chain antes de actuar.
+              <p style={{ margin: "0.5rem 0 0", maxWidth: "34ch" }}>
+                Inteligencia blockchain operada por agentes de IA. Verifica on-chain antes de actuar.
+              </p>
+              <p className="footer-status">
+                <span className="footer-dot" aria-hidden="true" /> 7 agentes · 2 redes · operating 24/7
               </p>
             </div>
             <nav aria-label="Producto">
               <h2>Producto</h2>
               <ul>
+                <li><Link href="/watch">Vigilancia</Link></li>
                 <li><Link href="/wallet">Wallet</Link></li>
                 <li><Link href="/contract">Contrato</Link></li>
-                <li><Link href="/watch">Vigilancia</Link></li>
               </ul>
             </nav>
             <nav aria-label="Recursos">
               <h2>Recursos</h2>
               <ul>
-                <li><a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">API</a></li>
+                <li><a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">API (OpenAPI)</a></li>
                 <li><a href="https://etherscan.io" target="_blank" rel="noreferrer">Etherscan</a></li>
                 <li><a href="https://basescan.org" target="_blank" rel="noreferrer">Basescan</a></li>
               </ul>
             </nav>
+          </div>
+          <div className="container footer-legal">
+            <span>© {new Date().getFullYear()} ChainMind</span>
+            <span>Análisis heurístico automatizado · no es asesoramiento financiero</span>
           </div>
         </footer>
       </body>

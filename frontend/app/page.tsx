@@ -59,41 +59,155 @@ export default function Landing() {
       </section>
 
       <div className="landing-wide">
+        <Reveal label="Prueba operacional" className="reveal proof-band">
+          <dl className="proof-grid">
+            <div>
+              <dt>Agentes operando</dt>
+              <dd>7</dd>
+            </div>
+            <div>
+              <dt>Redes vigiladas</dt>
+              <dd>2</dd>
+            </div>
+            <div>
+              <dt>Tests automatizados</dt>
+              <dd>53</dd>
+            </div>
+            <div>
+              <dt>Tiempo de reporte</dt>
+              <dd>&lt;10 s</dd>
+            </div>
+          </dl>
+        </Reveal>
+
         <Reveal label="El problema">
           <h2 className="eyebrow">El problema</h2>
-          <p style={{ fontSize: "clamp(1.25rem, 1rem + 1.5vw, 1.75rem)", lineHeight: 1.3, maxWidth: "40rem" }}>
+          <p className="statement">
             Cada día se mueven millones sin contexto. Una dirección es solo un hash hasta que
             alguien la investiga — y casi nadie tiene tiempo de hacerlo.
           </p>
         </Reveal>
 
+        <Reveal label="El pipeline de agentes">
+          <h2 className="eyebrow">Cómo collaborates los agentes</h2>
+          <p className="section-lede">
+            Cada transacción recorre la misma cadena de specialists. Ninguno improvisa: cada uno
+            entrega un artefacto verificable al siguiente.
+          </p>
+          <ol className="pipeline">
+            <li>
+              <span className="pipeline-step">01</span>
+              <div>
+                <strong>Monitoring Agent</strong>
+                <p>Lee bloques nuevos y detecta desviaciones frente a la mediana de la red.</p>
+              </div>
+            </li>
+            <li>
+              <span className="pipeline-step">02</span>
+              <div>
+                <strong>Transaction Agent</strong>
+                <p>Normaliza valor, gas, origen y destino; clasifica el tipo de movimiento.</p>
+              </div>
+            </li>
+            <li>
+              <span className="pipeline-step">03</span>
+              <div>
+                <strong>Wallet Agent</strong>
+                <p>Perfila antigüedad, contrapartes y patrón horario: humano o bot.</p>
+              </div>
+            </li>
+            <li>
+              <span className="pipeline-step">04</span>
+              <div>
+                <strong>Contract Agent</strong>
+                <p>Descompila bytecode y busca permisos peligrosos en contratos verificados.</p>
+              </div>
+            </li>
+            <li>
+              <span className="pipeline-step">05</span>
+              <div>
+                <strong>Risk Agent</strong>
+                <p>Puntúa 0–100 con heurísticas: mezcladores, concentración, anomalías.</p>
+              </div>
+            </li>
+            <li>
+              <span className="pipeline-step">06</span>
+              <div>
+                <strong>Research Agent</strong>
+                <p>Contrasta con exploradores y fuentes públicas antes de afirmar.</p>
+              </div>
+            </li>
+            <li>
+              <span className="pipeline-step">07</span>
+              <div>
+                <strong>Explanation Agent</strong>
+                <p>Único agente con LLM: traduce el score a lenguaje humano, con Claude.</p>
+              </div>
+            </li>
+          </ol>
+        </Reveal>
+
         <Reveal label="Qué obtienes">
-          <h2 className="eyebrow">Qué obtienes</h2>
+          <h2 className="eyebrow">Capacidades</h2>
           <ul className="bento">
             <li className="bento-cell bento-live">
+              <span className="bento-kicker">24/7</span>
               <strong>Vigilancia autónoma</strong>
               <p>Cada transacción de los últimos bloques, puntuada sola. Alertas sin pedir nada.</p>
-              <p style={{ marginBlockStart: "0.75rem" }}>
+              <p className="bento-link">
                 <Link href="/watch">Abrir vigilancia →</Link>
               </p>
             </li>
             <li className="bento-cell">
+              <span className="bento-kicker">Wallets</span>
               <strong>Verificar antes de enviar</strong>
-              <p>Mezcladores o bots visibles en segundos.</p>
+              <p>Mezcladores, bots o concentración de fondos visibles en segundos.</p>
             </li>
             <li className="bento-cell">
-              <strong>Auditar contratos</strong>
-              <p>Permisos peligrosos antes de firmar.</p>
+              <span className="bento-kicker">Contratos</span>
+              <strong>Auditar bytecode</strong>
+              <p>DELEGATECALL, SELFDESTRUCT, mint privilegiado y pausa centralizada.</p>
             </li>
             <li className="bento-cell">
-              <strong>Casos documentados</strong>
-              <p>Reporte .md con rutas y explicación.</p>
+              <span className="bento-kicker">Casos</span>
+              <strong>Reporte descargable</strong>
+              <p>Markdown con perfil, riesgo, rutas de fondos y explicación.</p>
             </li>
             <li className="bento-cell">
-              <strong>Multi-red</strong>
-              <p>Ethereum y Base, mismo motor.</p>
+              <span className="bento-kicker">Multi-red</span>
+              <strong>Ethereum y Base</strong>
+              <p>Mismo motor de agentes, sin código duplicado por cadena.</p>
             </li>
           </ul>
+        </Reveal>
+
+        <Reveal label="Cómo se usa" className="reveal steps-section">
+          <h2 className="eyebrow">Cómo se usa</h2>
+          <ol className="steps">
+            <li>
+              <div>
+                <strong>Elige red y objetivo</strong>
+                <p>
+                  En <Link href="/wallet">Wallet</Link> pega una dirección 0x. En{" "}
+                  <Link href="/watch">Vigilancia</Link> basta elegir la red.
+                </p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Lee el score</strong>
+                <p>0–29 bajo · 30–69 medio · 70–100 alto. Cada factor, explicado en claro.</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Profundiza o descarga</strong>
+                <p>
+                  Traza fondos, audita el <Link href="/contract">contrato</Link> o baja el .md.
+                </p>
+              </div>
+            </li>
+          </ol>
         </Reveal>
 
         <Reveal label="Preguntas">
@@ -110,6 +224,10 @@ export default function Landing() {
             <details>
               <summary>¿Un score alto es una acusación?</summary>
               <p>No. Es un heurístico automatizado: una señal para investigar on-chain, no un veredicto.</p>
+            </details>
+            <details>
+              <summary>¿Cuánto cuesta operarlo?</summary>
+              <p>Nada hasta nuevo aviso: corre en tu máquina con fuentes públicas. El LLM es opcional.</p>
             </details>
             <details>
               <summary>¿Cómo se usa?</summary>

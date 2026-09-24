@@ -83,11 +83,15 @@ export default function WatchPage() {
   const rows = feed ? (onlyAlerts ? feed.txs.filter(t => t.alert) : feed.txs).slice(0, 60) : [];
 
   return (
-    <main id="contenido" className="container" style={{ paddingBlock: "1.5rem" }}>
-      <h1>Vigilancia en vivo</h1>
-      <p style={{ color: "var(--muted)" }}>
-        Los agentes vigilan cada transacción de la red y marcan anomalías solos.
-      </p>
+    <main id="contenido" className="container page">
+      <header className="page-head">
+        <p className="eyebrow">Vigilancia 24/7</p>
+        <h1 className="page-title">Feed en vivo</h1>
+        <p className="section-lede">
+          Los agentes Monitoring, Transaction y Risk revisan cada bloque y marcan anomalías sin que
+          tengas que pedir nada.
+        </p>
+      </header>
 
       <div className="watch-bar">
         <form

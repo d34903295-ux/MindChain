@@ -47,11 +47,15 @@ export default function ContractPage() {
   };
 
   return (
-    <main id="contenido" className="container" style={{ paddingBlock: "1.5rem" }}>
-      <h1>Smart Contract</h1>
-      <p style={{ color: "var(--muted)" }}>
-        Dado un contrato verificado, devuelve permisos peligrosos y score de riesgo.
-      </p>
+    <main id="contenido" className="container page">
+      <header className="page-head">
+        <p className="eyebrow">Smart Contract</p>
+        <h1 className="page-title">Audita un contrato</h1>
+        <p className="section-lede">
+          Permisos peligrosos y score de riesgo a partir del bytecode y, si está verificado, del
+          código fuente con Slither.
+        </p>
+      </header>
 
       <form onSubmit={go} aria-label="Analizar contrato">
         <div className="field" style={{ maxWidth: "12rem" }}>
