@@ -142,7 +142,7 @@ export default function ContractPage() {
             <p style={{ color: "var(--muted)" }}>Sin hallazgos.</p>
           ) : (
             <ul>
-              {res.risks.map((x, i) => (
+              {[...res.risks].sort((a, b) => b.weight - a.weight).map((x, i) => (
                 <li key={`${x.id}-${i}`} style={{ fontSize: "0.875rem" }}>
                   <strong>{x.id}</strong> (+{x.weight}) [{x.origin}] — {x.message}
                 </li>

@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Skeleton } from "../../components/ui";
 
 type Tx = {
   hash: string;
   from: string;
   to: string | null;
+  block: number | null;
   value_eth: number;
   gas_price_gwei: number;
   score: number;
@@ -34,6 +36,7 @@ export default function WatchPage() {
   const [chain, setChain] = useState("ethereum");
   const [feed, setFeed] = useState<Feed | null>(null);
   const [auto, setAuto] = useState(true);
+  const [onlyAlerts, setOnlyAlerts] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [seen, setSeen] = useState(0);
@@ -77,6 +80,8 @@ export default function WatchPage() {
     return () => clearInterval(id);
   }, [auto, load]);
 
+  const rows = feed ? (onlyAlerts ? feed.txs.filter(t => t.alert) : feed.txs).slice(0, 60) : [];
+
   return (
     <main id="contenido" className="container" style={{ paddingBlock: "1.5rem" }}>
       <h1>Vigilancia en vivo</h1>
@@ -84,41 +89,53 @@ export default function WatchPage() {
         Los agentes vigilan cada transacción de la red y marcan anomalías solos.
       </p>
 
-      <form
-        aria-label="Opciones de vigilancia"
-        onSubmit={e => {
-          e.preventDefault();
-          load(false);
-        }}
-      >
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
-          <div className="field" style={{ minWidth: "10rem" }}>
-            <label htmlFor="w-chain">Red</label>
-            <select
-              id="w-chain"
-              className="select"
-              value={chain}
-              onChange={e => setChain(e.target.value)}
-            >
-              <option value="ethereum">Ethereum</option>
-              <option value="base">Base</option>
-            </select>
+      <div className="watch-bar">
+        <form
+          aria-label="Opciones de vigilancia"
+          onSubmit={e => {
+            e.preventDefault();
+            load(false);
+          }}
+        >
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+            <div className="field" style={{ minWidth: "10rem" }}>
+              <label htmlFor="w-chain">Red</label>
+              <select id="w-chain" className="select" value={chain} onChange={e => setChain(e.target.value)}>
+                <option value="ethereum">Ethereum</option>
+                <option value="base">Base</option>
+              </select>
+            </div>
+            <button type="submit" className="btn btn-secondary" disabled={loading}>
+              {loading ? "Actualizando…" : "Actualizar"}
+            </button>
+            <div className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <input
+                id="w-auto"
+                type="checkbox"
+                checked={auto}
+                onChange={e => setAuto(e.target.checked)}
+                style={{ width: "1.25rem", height: "1.25rem" }}
+              />
+              <label htmlFor="w-auto">Automático (12s)</label>
+            </div>
+            <div className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <input
+                id="w-alerts"
+                type="checkbox"
+                checked={onlyAlerts}
+                onChange={e => setOnlyAlerts(e.target.checked)}
+                style={{ width: "1.25rem", height: "1.25rem" }}
+              />
+              <label htmlFor="w-alerts">Solo alertas</label>
+            </div>
           </div>
-          <button type="submit" className="btn btn-secondary" disabled={loading}>
-            {loading ? "Actualizando…" : "Actualizar"}
-          </button>
-          <div className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <input
-              id="w-auto"
-              type="checkbox"
-              checked={auto}
-              onChange={e => setAuto(e.target.checked)}
-              style={{ width: "1.25rem", height: "1.25rem" }}
-            />
-            <label htmlFor="w-auto">Automático (12s)</label>
-          </div>
-        </div>
-      </form>
+        </form>
+        <p aria-live="polite" style={{ color: "var(--muted)", fontSize: "0.875rem", margin: "0.5rem 0 0" }}>
+          {feed
+            ? `Bloque ${feed.latest} · vigiladas ${seen} · alertas ${alertTotal}`
+            : "Conectando con la red…"}
+        </p>
+      </div>
 
       {err && (
         <p role="alert" className="error-text">
@@ -126,11 +143,7 @@ export default function WatchPage() {
         </p>
       )}
 
-      <p aria-live="polite" style={{ color: "var(--muted)", fontSize: "0.875rem" }}>
-        {feed
-          ? `Bloque ${feed.latest} · vigiladas ${seen} · alertas ${alertTotal}`
-          : "Conectando con la red…"}
-      </p>
+      {loading && !feed && <Skeleton label="Cargando transacciones" />}
 
       {feed && feed.alerts.length > 0 && (
         <section role="status" aria-label="Alertas de agentes" className="alert-box">
@@ -147,46 +160,37 @@ export default function WatchPage() {
         </section>
       )}
 
-      {feed && feed.txs.length > 0 && (
+      {feed && rows.length > 0 && (
         <div className="table-wrap">
           <table className="data">
             <caption style={{ textAlign: "start", fontWeight: 700, paddingBlockEnd: "0.5rem" }}>
-              Últimas transacciones analizadas
+              Últimas transacciones analizadas{onlyAlerts ? " (solo alertas)" : ""}
             </caption>
             <thead>
               <tr>
                 <th scope="col">Hash</th>
                 <th scope="col">De → Para</th>
-                <th scope="col" className="num">
-                  Valor
-                </th>
-                <th scope="col" className="num">
-                  Gas
-                </th>
-                <th scope="col" className="num">
-                  Score
-                </th>
+                <th scope="col" className="num">Bloque</th>
+                <th scope="col" className="num">Valor</th>
+                <th scope="col" className="num">Gas</th>
+                <th scope="col" className="num">Score</th>
                 <th scope="col">Agentes</th>
               </tr>
             </thead>
             <tbody>
-              {feed.txs.slice(0, 60).map(t => (
+              {rows.map(t => (
                 <tr key={t.hash} style={t.alert ? { background: "var(--bad-bg)" } : undefined}>
                   <td className="mono">{short(t.hash)}</td>
                   <td className="mono" style={{ fontSize: "0.75rem" }}>
                     {short(t.from)} → {t.to ? short(t.to) : "∅ nuevo contrato"}
                   </td>
+                  <td className="num">{t.block ?? "—"}</td>
                   <td className="num">{t.value_eth} ETH</td>
                   <td className="num">{t.gas_price_gwei} gwei</td>
                   <td className="num">
                     <strong
                       style={{
-                        color:
-                          t.score >= 50
-                            ? "var(--bad)"
-                            : t.score >= 20
-                              ? "var(--warn)"
-                              : "var(--ok)",
+                        color: t.score >= 50 ? "var(--bad)" : t.score >= 20 ? "var(--warn)" : "var(--ok)",
                       }}
                     >
                       {t.score}
@@ -199,8 +203,10 @@ export default function WatchPage() {
           </table>
         </div>
       )}
-      {feed && feed.txs.length === 0 && (
-        <p style={{ color: "var(--muted)" }}>Sin bloques nuevos desde la última revisión.</p>
+      {feed && rows.length === 0 && (
+        <p style={{ color: "var(--muted)" }}>
+          {onlyAlerts ? "Sin alertas en este lote." : "Sin bloques nuevos desde la última revisión."}
+        </p>
       )}
     </main>
   );

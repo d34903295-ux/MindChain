@@ -45,11 +45,12 @@ def _h2i(h) -> int:
         return 0
 
 
-def norm_tx(t: dict) -> dict:
+def norm_tx(t: dict, block: int | None = None) -> dict:
     value_wei = _h2i(t.get("value"))
     to = t.get("to")
     return {
         "hash": t.get("hash", ""),
+        "block": block,
         "from": str(t.get("from", "")).lower(),
         "to": str(to).lower() if to else None,
         "value_wei": str(value_wei),
@@ -107,7 +108,7 @@ def scan(chain: str = "ethereum", since: int | None = None, max_blocks: int = 2)
         blocks.append({"number": n, "time": b.get("timestamp", ""), "tx_count": len(items)})
         for raw in items:
             try:
-                txs.append(norm_tx(raw))
+                txs.append(norm_tx(raw, block=n))
             except Exception:
                 continue
     win = _windows[key]

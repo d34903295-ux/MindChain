@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 const LINKS = [
   { href: "/wallet", label: "Wallet" },
@@ -81,6 +81,75 @@ export function Stat({ term, children }: { term: string; children: ReactNode }) 
     <div className="stat">
       <dt>{term}</dt>
       <dd>{children}</dd>
+    </div>
+  );
+}
+
+const ARC = Math.PI * 52;
+
+export function RiskGauge({ value, label }: { value: number; label: string }) {
+  const toneName = riskTone(value);
+  const filled = Math.max(0, Math.min(100, value)) / 100;
+  return (
+    <div
+      className="gauge-wrap"
+      role="progressbar"
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={label}
+    >
+      <svg width="120" height="68" viewBox="0 0 120 68" aria-hidden="true">
+        <path d="M 8 60 A 52 52 0 0 1 112 60" fill="none" stroke="var(--border)" strokeWidth="10" strokeLinecap="round" />
+        <path
+          d="M 8 60 A 52 52 0 0 1 112 60"
+          fill="none"
+          stroke={TONE_VAR[toneName]}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={`${(filled * ARC).toFixed(1)} ${ARC.toFixed(1)}`}
+        />
+      </svg>
+      <div>
+        <div className="gauge-num" style={{ color: TONE_VAR[toneName] }}>
+          {value}
+          <span style={{ fontSize: "1rem", color: "var(--muted)" }}>/100</span>
+        </div>
+        <div style={{ fontSize: "0.875rem", color: "var(--muted)" }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+export function CopyButton({ text, label }: { text: string; label: string }) {
+  const [done, setDone] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      setTimeout(() => setDone(false), 2000);
+    } catch {
+      setDone(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" className="copy-btn" onClick={copy} aria-label={`Copiar ${label}`}>
+        {done ? "Copiado ✓" : "Copiar"}
+      </button>
+      <span aria-live="polite" className="mono" style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+        {done ? "copiado al portapapeles" : ""}
+      </span>
+    </>
+  );
+}
+
+export function Skeleton({ label }: { label: string }) {
+  return (
+    <div role="status" aria-label={label} style={{ display: "grid", gap: "0.5rem", marginBlockStart: "1rem" }}>
+      <div className="skeleton" style={{ height: "2.5rem", width: "60%" }} />
+      <div className="skeleton" style={{ height: "5rem" }} />
+      <div className="skeleton" style={{ height: "5rem" }} />
     </div>
   );
 }
