@@ -30,6 +30,33 @@ DISCLAIMERS = (
 )
 
 
+FLAG_TEXT = {
+    "creacion_contrato": "crea un contrato nuevo",
+    "gas_alto": "gas por encima de lo normal",
+    "gas_muy_alto": "gas muy alto",
+    "payload_grande": "payload grande (posible operación compleja)",
+    "ballena_100eth+": "movimiento de 100+ ETH",
+    "ballena_1000eth+": "movimiento de 1.000+ ETH",
+}
+
+
+def flag_text(flag: str) -> str:
+    """Traduce una señal del watcher a lenguaje claro (para vault y UI)."""
+    if flag in FLAG_TEXT:
+        return FLAG_TEXT[flag]
+    if flag.startswith("outlier_") and "mediana" in flag:
+        try:
+            ratio = flag.split("_")[1].rstrip("x")
+            return f"valor {ratio}× la mediana de la red"
+        except Exception:
+            return "valor muy por encima de la mediana"
+    if flag.startswith("outlier_estadistico_z"):
+        return "outlier estadístico respecto a la red"
+    if flag.startswith("watchlist:"):
+        return f"interacción con dirección listada ({safe_label(flag.split(':', 1)[1])})"
+    return flag.replace("_", " ")
+
+
 def _factor_text(factor: str) -> str:
     if factor in FACTOR_TEXT:
         return FACTOR_TEXT[factor]

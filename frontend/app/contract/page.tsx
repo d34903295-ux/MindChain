@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Chip, RiskGauge, Skeleton, riskTone } from "../../components/ui";
+import { ObsidianExport } from "../../components/ObsidianExport";
 
 type Risk = { id: string; weight: number; origin: string; message: string };
 type Rep = {
@@ -126,6 +127,7 @@ export default function ContractPage() {
               <p className="result-actions">
                 {res.verified ? <Chip tone="ok">verificado</Chip> : <Chip tone="bad">no verificado</Chip>}
                 {!res.is_contract && <Chip tone="warn">no es contrato (EOA)</Chip>}
+                <ObsidianExport address={res.address} chain={res.chain} kind="contract" riskScore={res.risk_score} />
               </p>
             </div>
           </div>

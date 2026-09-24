@@ -14,6 +14,19 @@ from agents.alerts import alert_if_risky
 
 router = APIRouter()
 
+
+def _try_obsidian(report: dict) -> dict:
+    """Auto-export al vault solo si está activado. Un fallo aquí nunca rompe el análisis."""
+    import os
+    if os.getenv("CHAINMIND_OBSIDIAN_AUTO", "0") != "1":
+        return {"exported": False, "reason": "auto-desactivado"}
+    try:
+        from agents import obsidian
+        res = obsidian.sync_wallet(report)
+        return {"exported": bool(res.get("written")), **{k: v for k, v in res.items() if k != "written"}}
+    except Exception as e:
+        return {"exported": False, "reason": f"obsidian no disponible: {str(e)[:60]}"}
+
 class AnalyzeRequest(BaseModel):
     address: str = Field(pattern=r"^0x[0-9a-fA-F]{40}$")
     chain: str = "ethereum"
@@ -57,7 +70,18 @@ def analyze_wallet(payload: AnalyzeRequest):
     except Exception:
         pass
     alert = alert_if_risky("wallet", payload.address, payload.chain.lower(), score, factors)
+    obsidian_res = _try_obsidian({
+        "address": payload.address,
+        "chain": payload.chain.lower(),
+        "profile": profile,
+        "risk_score": score,
+        "risk_factors": factors,
+        "explanation": text,
+        "elapsed_s": elapsed,
+        "source": fetched.get("source"),
+    })
     return {"address": payload.address, "chain": payload.chain.lower(), "profile": profile,
             "risk_score": score, "risk_factors": factors, "explanation": text,
             "elapsed_s": elapsed, "source": fetched.get("source"),
-            "cached": bool(fetched.get("cached")), "data_quality": dq, "alert": alert}
+            "cached": bool(fetched.get("cached")), "data_quality": dq,
+            "alert": alert, "obsidian": obsidian_res}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Chip, CopyButton, RiskGauge, Skeleton, Stat, riskTone } from "../../components/ui";
+import { ObsidianExport } from "../../components/ObsidianExport";
 
 type Report = {
   address: string;
@@ -132,6 +133,7 @@ export default function WalletPage() {
                 >
                   Descargar reporte .md
                 </a>
+                <ObsidianExport address={res.address} chain={res.chain} kind="wallet" riskScore={res.risk_score} />
               </p>
             </div>
           </div>
