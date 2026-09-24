@@ -271,6 +271,117 @@ img {
   height: auto;
 }
 
+/* Landing minimalista: ritmo vertical, filetes finos, sin cajas. */
+.landing {
+  max-width: 42rem;
+}
+.eyebrow {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+.hero-title {
+  font-size: clamp(2rem, 1.5rem + 2.5vw, 2.75rem);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  margin-block: 0.75rem 0.5rem;
+}
+.lede {
+  font-size: 1.0625rem;
+  color: var(--muted);
+  max-width: 38rem;
+}
+.cta-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-block: 1.5rem 0;
+}
+.quiet-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--primary);
+  font-weight: 600;
+}
+.rule {
+  border: none;
+  border-block-start: 1px solid var(--border);
+  margin-block: 2.5rem 0;
+}
+.landing h2 {
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-block: 0 1rem;
+}
+.def-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.def-list li {
+  padding-block: 0.875rem;
+  border-block-start: 1px solid var(--border);
+}
+.def-list li:last-child {
+  border-block-end: 1px solid var(--border);
+}
+.def-list strong {
+  display: block;
+  font-size: 1rem;
+}
+.def-list p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+  border-block-start: 1px solid var(--border);
+}
+.steps li:last-child {
+  border-block-end: 1px solid var(--border);
+}
+.steps li::before {
+  content: counter(step, decimal-leading-zero);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 0.875rem;
+  padding-block-start: 0.2rem;
+}
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0 2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mini-grid li {
+  padding-block: 0.625rem;
+  border-block-start: 1px solid var(--border);
+  font-size: 0.9375rem;
+}
+.mini-grid li strong {
+  display: block;
+}
+
 .site-footer {
   border-block-start: 1px solid var(--border);
   margin-block-start: 2.5rem;
