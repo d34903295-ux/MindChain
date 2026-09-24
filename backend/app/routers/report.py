@@ -1,10 +1,11 @@
 import sys, pathlib
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from agents.chains import get_chain
 from agents.fetcher import fetch_wallet_data
 from agents.wallet_intelligence import build_profile
 from agents.risk_scoring import score_wallet
@@ -19,7 +20,12 @@ def investigate(payload: dict):
     address = str(payload.get("address", ""))
     depth = int(payload.get("max_depth", 3))
     direction = str(payload.get("direction", "both"))
-    fetched = fetch_wallet_data(address)
+    chain = str(payload.get("chain", "ethereum"))
+    try:
+        get_chain(chain)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    fetched = fetch_wallet_data(address, chain=chain)
     _, txs = build_profile(address, fetched)
     extra = neo4j_expand(address)
     if extra.get("edges"):
@@ -30,12 +36,16 @@ def investigate(payload: dict):
     return trace
 
 @router.get("/report/{address}")
-def report(address: str, max_depth: int = 3):
-    fetched = fetch_wallet_data(address)
+def report(address: str, max_depth: int = 3, chain: str = "ethereum"):
+    try:
+        get_chain(chain)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    fetched = fetch_wallet_data(address, chain=chain)
     profile, txs = build_profile(address, fetched)
     score, factors = score_wallet(profile, txs)
     text = explain(profile, score, factors)
-    wr = {"address": address, "chain": "ethereum", "profile": profile,
+    wr = {"address": address, "chain": chain.lower(), "profile": profile,
           "risk_score": score, "risk_factors": factors, "explanation": text,
           "elapsed_s": 0, "source": fetched.get("source")}
     trace = trace_from_txs(address, txs, max_depth=max(1, min(max_depth, 5)), direction="both")

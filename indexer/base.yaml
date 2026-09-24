@@ -1,0 +1,30 @@
+manifestVersion: subsquid.io/v1
+name: chainmind-base
+version: 1
+description: ChainMind Fase 5 — Base mainnet (mismo patron que Ethereum, sin duplicar agentes)
+deploy:
+  addons:
+    postgres: {}
+processor:
+  constructor: EvmBatchProcessor
+  dataSource:
+    archive: https://v2.archive.subsquid.io/network/base-mainnet
+    chain: ${RPC_BASE_HTTP:https://mainnet.base.org}
+  finalityConfirmation: 75
+  fields:
+    transaction:
+      - block.number
+      - block.timestamp
+      - hash
+      - from
+      - to
+      - value
+      - gasUsed
+      - gasPrice
+  includeAllBlocks: false
+query:
+  - field: transaction
+    includeAllBlocks: false
+store:
+  type: typeorm
+  migrations: db/migrations

@@ -74,4 +74,6 @@ def profile_wallet(address: str, txs: list[dict], raw: dict | None = None) -> di
 def build_profile(address: str, fetched: dict) -> tuple[dict, list[dict]]:
     from .fetcher import normalize_txs
     txs = normalize_txs(address, fetched.get("calls", []))
-    return profile_wallet(address, txs, fetched.get("raw_address", {})), txs
+    profile = profile_wallet(address, txs, fetched.get("raw_address", {}))
+    profile["chain"] = fetched.get("chain", "ethereum")
+    return profile, txs

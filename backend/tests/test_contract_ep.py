@@ -4,10 +4,10 @@ import app.routers.contract as mod
 
 client = TestClient(app)
 
-def fake_fetch(address):
+def fake_fetch(address, chain="ethereum", limit=25):
     return {"address": address, "code": "0x6001", "is_contract": True, "code_size_bytes": 2,
             "verified": True, "verified_via": "mock", "source": "contract T { function transfer(address to) public {} }",
-            "source_origin": "mock"}
+            "source_origin": "mock", "chain": chain}
 
 def test_analyze_contract_mock(monkeypatch):
     monkeypatch.setattr(mod, "fetch_contract", fake_fetch)

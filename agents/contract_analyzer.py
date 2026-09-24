@@ -4,8 +4,9 @@ Analisis: heuristicas de codigo (estilo Smart-Contract-Risk-Analyzer) + disassem
 de bytecode (DELEGATECALL/SELFDESTRUCT/CALLCODE) + Slither opt-in (CHAINMIND_SLITHER=1).
 """
 import os, json, shutil, subprocess, tempfile, urllib.request
+from .chains import get_chain, chain_key, rpc_list
 
-SOURCIFY_MATCH = "https://sourcify.dev/server/v2/contract/1"
+SOURCIFY_BASE = "https://sourcify.dev/server/v2/contract/"
 
 def _http_json(url, payload=None, timeout=6, headers=None):
     import json as _j
@@ -35,8 +36,12 @@ def rpc_url():
             return u
     return "https://ethereum.publicnode.com"
 
-def get_code(address):
-    for u in [os.getenv("ETH_RPC_URL", ""), "https://ethereum.publicnode.com", "https://1rpc.io/eth", "https://eth.drpc.org"]:
+def get_code(address, chain="ethereum"):
+    try:
+        rpcs = rpc_list(chain)
+    except ValueError:
+        rpcs = []
+    for u in rpcs:
         if not u:
             continue
         c = _rpc_call(u, "eth_getCode", [address, "latest"])
@@ -44,20 +49,23 @@ def get_code(address):
             return c
     return "0x"
 
-def sourcify_verified(address):
+def sourcify_verified(address, chain="ethereum"):
+    key = chain_key(chain)
+    sid = get_chain(key).get("sourcify_id", 1)
     try:
-        d = _http_json(SOURCIFY_MATCH + "/" + address, timeout=6)
+        d = _http_json(SOURCIFY_BASE + str(sid) + "/" + address, timeout=6)
         m = str(d.get("match", ""))
         return m in ("match", "perfect", "partial"), "sourcify"
     except Exception:
         return False, "sourcify-unreachable"
 
-def etherscan_source(address):
+def etherscan_source(address, chain="ethereum"):
     key = os.getenv("ETHERSCAN_API_KEY", "")
     if not key:
         return None, "sin-api-key"
+    cid = get_chain(chain_key(chain)).get("etherscan_chainid", 1)
     try:
-        url = "https://api.etherscan.io/v2/api?chainid=1&module=contract&action=getsourcecode&address=" + address + "&apikey=" + key
+        url = "https://api.etherscan.io/v2/api?chainid=" + str(cid) + "&module=contract&action=getsourcecode&address=" + address + "&apikey=" + key
         d = _http_json(url, timeout=6)
         res = (d.get("result") or [{}])[0]
         src = res.get("SourceCode", "")
@@ -81,20 +89,22 @@ def delegation_7702(code):
         return "0x" + code[8:48]
     return None
 
-def fetch_contract(address):
-    code = get_code(address)
+def fetch_contract(address, chain="ethereum"):
+    key = chain_key(chain)
+    get_chain(key)
+    code = get_code(address, chain=key)
     if not valid_code(code):
         code = "0x"
     delegate = delegation_7702(code)
     account_type = "eoa_7702" if delegate else ("contract" if len(code) > 2 else "eoa")
     is_contract = account_type == "contract"
-    verified, via = (sourcify_verified(address) if is_contract else (False, "n/a-eoa"))
-    source, sorigin = (etherscan_source(address) if is_contract else (None, "n/a-eoa"))
+    verified, via = (sourcify_verified(address, chain=key) if is_contract else (False, "n/a-eoa"))
+    source, sorigin = (etherscan_source(address, chain=key) if is_contract else (None, "n/a-eoa"))
     size = max(len(code) - 2, 0) // 2
     return {"address": address, "code": code, "is_contract": is_contract,
             "account_type": account_type, "delegated_to": delegate,
             "code_size_bytes": size, "verified": verified, "verified_via": via,
-            "source": source, "source_origin": sorigin}
+            "source": source, "source_origin": sorigin, "chain": key}
 
 SOURCE_CHECKS = [
     ("selfdestruct", 30, ["selfdestruct"], "any", "SELFDESTRUCT: el owner puede destruir el contrato y mover fondos"),

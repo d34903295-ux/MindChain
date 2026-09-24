@@ -3,6 +3,7 @@ import { useState } from "react";
 type Report = { address: string; profile: any; risk_score: number; risk_factors: string[]; explanation: string; elapsed_s?: number; source?: string };
 export default function Home() {
   const [addr, setAddr] = useState("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+  const [chain, setChain] = useState("ethereum");
   const [res, setRes] = useState<Report | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -10,7 +11,7 @@ export default function Home() {
     setLoading(true); setErr(""); setRes(null);
     try {
       const t0 = Date.now();
-      const r = await fetch("http://localhost:8000/analyze-wallet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address: addr }) });
+      const r = await fetch("http://localhost:8000/analyze-wallet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address: addr, chain }) });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       j.client_s = (Date.now() - t0) / 1000;
@@ -23,9 +24,14 @@ export default function Home() {
     <h1>ChainMind — Wallet Intelligence (Fase 1 MVP)</h1>
     <p style={{ color: "#555" }}>Pega una dirección Ethereum y obtén perfil + score + explicación en &lt;10s.</p>
     <div style={{ display: "flex", gap: 8 }}>
+      <select value={chain} onChange={e => setChain(e.target.value)} style={{ padding: 10 }}>
+        <option value="ethereum">Ethereum</option>
+        <option value="base">Base</option>
+      </select>
       <input value={addr} onChange={e => setAddr(e.target.value)} placeholder="0x..." style={{ flex: 1, padding: 10, fontFamily: "monospace" }} />
       <button onClick={analyze} disabled={loading} style={{ padding: "10px 18px", fontWeight: 700 }}>{loading ? "..." : "Analizar"}</button>
     </div>
+    <p style={{ fontSize: 13 }}><a href="/contract">Analizar contrato</a>{res && <> · <a href={"http://localhost:8000/report/" + res.address + "?chain=" + chain} target="_blank" rel="noreferrer">Descargar reporte .md</a></>}</p>
     {err && <p style={{ color: "red" }}>{err}</p>}
     {res && (<section style={{ marginTop: 20, border: "1px solid #ddd", borderRadius: 12, padding: 18 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
