@@ -10,3 +10,6 @@ pgdata/
 neo4j_data/
 *.log
 .DS_Store
+.pytest_cache/
+reports/
+reports_demo/
