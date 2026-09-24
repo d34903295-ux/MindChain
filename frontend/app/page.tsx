@@ -35,7 +35,10 @@ export default function Home() {
     {err && <p style={{ color: "red" }}>{err}</p>}
     {res && (<section style={{ marginTop: 20, border: "1px solid #ddd", borderRadius: 12, padding: 18 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <code style={{ fontSize: 12 }}>{res.address}</code>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <img src={"http://localhost:8000/qr/" + res.address} width={96} height={96} alt="QR de la wallet" title="Escanear dirección" />
+          <code style={{ fontSize: 12 }}>{res.address}</code>
+        </div>
         <span style={{ fontSize: 12, color: "#666" }}>{res.elapsed_s}s servidor · fuente {res.source}</span>
       </div>
       <div style={{ marginTop: 12 }}>

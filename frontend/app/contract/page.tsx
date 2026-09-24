@@ -25,7 +25,8 @@ export default function ContractPage() {
     </div>
     {err && <p style={{ color: "red" }}>{err}</p>}
     {res && (<section style={{ marginTop: 20, border: "1px solid #ddd", borderRadius: 12, padding: 18 }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <img src={"http://localhost:8000/qr/" + res.address} width={96} height={96} alt="QR del contrato" title="Escanear dirección" />
         <code style={{ fontSize: 12 }}>{res.address}</code>
         <span style={{ fontSize: 12, background: res.verified ? "#dcfce7" : "#fee2e2", padding: "2px 8px", borderRadius: 20 }}>{res.verified ? "verificado" : "no verificado"}</span>
         <span style={{ fontSize: 12, color: "#666" }}>{res.code_size_bytes} bytes · {res.source_origin} · slither {res.slither_used ? "sí" : "no"} · {res.elapsed_s}s</span>
