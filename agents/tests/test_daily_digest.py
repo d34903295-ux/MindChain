@@ -65,6 +65,19 @@ def test_sobrevive_al_reinicio_del_proceso(vault, tmp_path):
     assert "2 barridos" in texto, "el acumulador en disco debe rehidratarse"
 
 
+def test_poda_los_acumuladores_viejos_siempre(vault, tmp_path):
+    """Los acumuladores son un fichero por día: no pueden crecer para siempre."""
+    import os, time
+    viejo = tmp_path / "daily-2000-01-01.json"
+    viejo.write_text('{"day":"2000-01-01","sweeps":1,"chains":{}}', encoding="utf-8")
+    os.utime(viejo, (time.time() - 40 * 86400, time.time() - 40 * 86400))
+    reciente = tmp_path / "daily-2026-01-01.json"
+    reciente.write_text('{"day":"2026-01-01","sweeps":1,"chains":{}}', encoding="utf-8")
+    obsidian._prune_daily_state(tmp_path)
+    assert not viejo.exists(), "un acumulador de hace 40 días debe podarse"
+    assert reciente.exists(), "no se poda lo que aún está dentro de la ventana"
+
+
 def test_texto_limpio_para_humanos(vault):
     obsidian.sync_daily_digest(_feed())
     text = next((vault / "daily").glob("*.md")).read_text(encoding="utf-8")

@@ -383,6 +383,22 @@ def _save_daily_state(state: dict) -> None:
         tmp.replace(path)
     except Exception:
         pass
+    _prune_daily_state(path.parent)
+
+
+def _prune_daily_state(folder: pathlib.Path, keep_days: int = 30) -> int:
+    """Los acumuladores son un fichero por día: se podan los viejos."""
+    try:
+        limite = time.time() - keep_days * 86400
+        for f in folder.glob("daily-*.json"):
+            try:
+                if f.stat().st_mtime < limite:
+                    f.unlink()
+            except OSError:
+                continue
+    except Exception:
+        pass
+    return keep_days
 
 
 def accumulate_sweep(feed: dict) -> dict:
