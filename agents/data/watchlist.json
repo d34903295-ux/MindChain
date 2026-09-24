@@ -1,3 +1,4 @@
 {
+  "_comment": "Direcciones sensibles verificadas on-chain. Añade SOLO direcciones confirmadas: la API /watchlist comprueba el bytecode al añadir y `python scripts/verify_watchlist.py` audita el fichero. Una EOA o una EOA delegada (EIP-7702) no son contratos y se descartan. Etiqueta = origen documentado. Vacío por defecto para no generar falsos positivos.",
   "addresses": []
 }
