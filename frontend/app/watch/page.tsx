@@ -1,16 +1,34 @@
 "use client";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Tx = {
-  hash: string; from: string; to: string | null; value_eth: number;
-  gas_price_gwei: number; score: number; flags: string[]; alert: boolean;
+  hash: string;
+  from: string;
+  to: string | null;
+  value_eth: number;
+  gas_price_gwei: number;
+  score: number;
+  flags: string[];
+  alert: boolean;
 };
 type Feed = {
-  chain: string; latest: number; blocks: { number: number; tx_count: number }[];
-  txs: Tx[]; alerts: Tx[]; n_txs: number; n_alerts: number; elapsed_s: number;
+  chain: string;
+  latest: number;
+  blocks: { number: number; tx_count: number }[];
+  txs: Tx[];
+  alerts: Tx[];
+  n_txs: number;
+  n_alerts: number;
+  elapsed_s: number;
 };
 
 const POLL_MS = 12000;
+
+function short(h: string): string {
+  if (h.length < 16) return h;
+  return `${h.slice(0, 10)}…${h.slice(-6)}`;
+}
 
 export default function WatchPage() {
   const [chain, setChain] = useState("ethereum");
@@ -22,25 +40,28 @@ export default function WatchPage() {
   const [alertTotal, setAlertTotal] = useState(0);
   const sinceRef = useRef<number | null>(null);
 
-  const load = useCallback(async (reset = false) => {
-    setLoading(true);
-    try {
-      const since = reset ? null : sinceRef.current;
-      const q = since ? `?since=${since}&max_blocks=3` : `?max_blocks=2`;
-      const r = await fetch(`http://localhost:8000/feed/${chain}${q}`);
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const j: Feed = await r.json();
-      sinceRef.current = j.latest;
-      setFeed(j);
-      setSeen(s => s + j.n_txs);
-      setAlertTotal(s => s + j.n_alerts);
-      setErr("");
-    } catch (e: unknown) {
-      setErr("Sin datos. ¿Backend en :8000? " + (e instanceof Error ? e.message : String(e)));
-    } finally {
-      setLoading(false);
-    }
-  }, [chain]);
+  const load = useCallback(
+    async (reset = false) => {
+      setLoading(true);
+      try {
+        const since = reset ? null : sinceRef.current;
+        const q = since ? `?since=${since}&max_blocks=3` : `?max_blocks=2`;
+        const r = await fetch(`http://localhost:8000/feed/${chain}${q}`);
+        if (!r.ok) throw new Error(`El backend devolvió ${r.status}`);
+        const j: Feed = await r.json();
+        sinceRef.current = j.latest;
+        setFeed(j);
+        setSeen(s => s + j.n_txs);
+        setAlertTotal(s => s + j.n_alerts);
+        setErr("");
+      } catch (e: unknown) {
+        setErr(`Sin datos. ¿Backend en :8000? ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [chain]
+  );
 
   useEffect(() => {
     sinceRef.current = null;
@@ -56,66 +77,131 @@ export default function WatchPage() {
     return () => clearInterval(id);
   }, [auto, load]);
 
-  const short = (h: string) => h.slice(0, 10) + "…" + h.slice(-6);
-
   return (
-    <main style={{ padding: 28, maxWidth: 1100, fontFamily: "system-ui" }}>
-      <h1>ChainMind — Vigilancia en vivo</h1>
-      <p style={{ color: "#555" }}>
-        <a href="/">Wallet</a> · <a href="/contract">Contrato</a> · Los agentes vigilan cada transacción de la red y marcan anomalías solos.
+    <main id="contenido" className="container" style={{ paddingBlock: "1.5rem" }}>
+      <h1>Vigilancia en vivo</h1>
+      <p style={{ color: "var(--muted)" }}>
+        Los agentes vigilan cada transacción de la red y marcan anomalías solos.
       </p>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <select value={chain} onChange={e => setChain(e.target.value)} style={{ padding: 10 }}>
-          <option value="ethereum">Ethereum</option>
-          <option value="base">Base</option>
-        </select>
-        <button onClick={() => load(false)} disabled={loading} style={{ padding: "10px 18px", fontWeight: 700 }}>
-          {loading ? "…" : "Actualizar"}
-        </button>
-        <label style={{ fontSize: 14 }}>
-          <input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> auto (12s)
-        </label>
-        {feed && (
-          <span style={{ fontSize: 13, color: "#555" }}>
-            bloque {feed.latest} · vigiladas {seen} · <b style={{ color: alertTotal ? "#dc2626" : "#16a34a" }}>alertas {alertTotal}</b>
-          </span>
-        )}
-      </div>
-      {err && <p style={{ color: "red" }}>{err}</p>}
+
+      <form
+        aria-label="Opciones de vigilancia"
+        onSubmit={e => {
+          e.preventDefault();
+          load(false);
+        }}
+      >
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+          <div className="field" style={{ minWidth: "10rem" }}>
+            <label htmlFor="w-chain">Red</label>
+            <select
+              id="w-chain"
+              className="select"
+              value={chain}
+              onChange={e => setChain(e.target.value)}
+            >
+              <option value="ethereum">Ethereum</option>
+              <option value="base">Base</option>
+            </select>
+          </div>
+          <button type="submit" className="btn btn-secondary" disabled={loading}>
+            {loading ? "Actualizando…" : "Actualizar"}
+          </button>
+          <div className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <input
+              id="w-auto"
+              type="checkbox"
+              checked={auto}
+              onChange={e => setAuto(e.target.checked)}
+              style={{ width: "1.25rem", height: "1.25rem" }}
+            />
+            <label htmlFor="w-auto">Automático (12s)</label>
+          </div>
+        </div>
+      </form>
+
+      {err && (
+        <p role="alert" className="error-text">
+          {err}
+        </p>
+      )}
+
+      <p aria-live="polite" style={{ color: "var(--muted)", fontSize: "0.875rem" }}>
+        {feed
+          ? `Bloque ${feed.latest} · vigiladas ${seen} · alertas ${alertTotal}`
+          : "Conectando con la red…"}
+      </p>
+
       {feed && feed.alerts.length > 0 && (
-        <section style={{ marginTop: 16, border: "2px solid #fecaca", background: "#fef2f2", borderRadius: 12, padding: 14 }}>
-          <b>Alertas de agentes ({feed.n_alerts} en últimos bloques)</b>
-          <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+        <section role="status" aria-label="Alertas de agentes" className="alert-box">
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>
+            Alertas de agentes ({feed.n_alerts} en últimos bloques)
+          </h2>
+          <ul style={{ margin: "0.5rem 0 0", paddingInlineStart: "1.125rem" }}>
             {feed.alerts.slice(0, 10).map(t => (
-              <li key={t.hash} style={{ fontSize: 13, fontFamily: "monospace" }}>
+              <li key={t.hash} className="mono" style={{ fontSize: "0.8125rem" }}>
                 {short(t.hash)} · {t.value_eth} ETH · score {t.score} · {t.flags.join(", ")}
               </li>
             ))}
           </ul>
         </section>
       )}
-      {feed && (
-        <table style={{ marginTop: 16, width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
-              <th>Hash</th><th>De → Para</th><th>Valor</th><th>Gas</th><th>Score</th><th>Agentes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {feed.txs.slice(0, 60).map(t => (
-              <tr key={t.hash} style={{ borderBottom: "1px solid #eee", background: t.alert ? "#fef2f2" : "transparent" }}>
-                <td style={{ fontFamily: "monospace" }}>{short(t.hash)}</td>
-                <td style={{ fontFamily: "monospace", fontSize: 12 }}>{short(t.from)} → {t.to ? short(t.to) : "∅ nuevo contrato"}</td>
-                <td>{t.value_eth} ETH</td>
-                <td>{t.gas_price_gwei} gwei</td>
-                <td><b style={{ color: t.score >= 50 ? "#dc2626" : t.score >= 20 ? "#d97706" : "#16a34a" }}>{t.score}</b></td>
-                <td>{t.flags.length === 0 ? <span style={{ color: "#999" }}>limpia</span> : t.flags.join(", ")}</td>
+
+      {feed && feed.txs.length > 0 && (
+        <div className="table-wrap">
+          <table className="data">
+            <caption style={{ textAlign: "start", fontWeight: 700, paddingBlockEnd: "0.5rem" }}>
+              Últimas transacciones analizadas
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Hash</th>
+                <th scope="col">De → Para</th>
+                <th scope="col" className="num">
+                  Valor
+                </th>
+                <th scope="col" className="num">
+                  Gas
+                </th>
+                <th scope="col" className="num">
+                  Score
+                </th>
+                <th scope="col">Agentes</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {feed.txs.slice(0, 60).map(t => (
+                <tr key={t.hash} style={t.alert ? { background: "var(--bad-bg)" } : undefined}>
+                  <td className="mono">{short(t.hash)}</td>
+                  <td className="mono" style={{ fontSize: "0.75rem" }}>
+                    {short(t.from)} → {t.to ? short(t.to) : "∅ nuevo contrato"}
+                  </td>
+                  <td className="num">{t.value_eth} ETH</td>
+                  <td className="num">{t.gas_price_gwei} gwei</td>
+                  <td className="num">
+                    <strong
+                      style={{
+                        color:
+                          t.score >= 50
+                            ? "var(--bad)"
+                            : t.score >= 20
+                              ? "var(--warn)"
+                              : "var(--ok)",
+                      }}
+                    >
+                      {t.score}
+                    </strong>
+                  </td>
+                  <td>{t.flags.length === 0 ? <span style={{ color: "var(--muted)" }}>limpia</span> : t.flags.join(", ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-      {feed && feed.txs.length === 0 && <p style={{ color: "#555" }}>Sin bloques nuevos desde la última revisión.</p>}
+      {feed && feed.txs.length === 0 && (
+        <p style={{ color: "var(--muted)" }}>Sin bloques nuevos desde la última revisión.</p>
+      )}
     </main>
   );
 }

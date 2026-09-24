@@ -1,0 +1,305 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens: light default + dark via prefers-color-scheme (skill §7). */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --surface: #f4f5fa;
+  --card: #ffffff;
+  --text: #1a1a2e;
+  --muted: #555770;
+  --border: #d9dae6;
+  --primary: #1d4ed8;
+  --on-primary: #ffffff;
+  --focus: #1d4ed8;
+  --ok: #15803d;
+  --ok-bg: #dcfce7;
+  --ok-border: #86efac;
+  --warn: #b45309;
+  --warn-bg: #fef3c7;
+  --warn-border: #fcd34d;
+  --bad: #b91c1c;
+  --bad-bg: #fee2e2;
+  --bad-border: #fca5a5;
+  --info-bg: #fffbeb;
+  --info-border: #fde68a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f0f17;
+    --surface: #15151f;
+    --card: #1c1c28;
+    --text: #e8e8f2;
+    --muted: #b3b3cb;
+    --border: #34344c;
+    --primary: #7aa5ff;
+    --on-primary: #0f0f17;
+    --focus: #7aa5ff;
+    --ok: #4ade80;
+    --ok-bg: #052e1b;
+    --ok-border: #166534;
+    --warn: #fbbf24;
+    --warn-bg: #3a2a08;
+    --warn-border: #92400e;
+    --bad: #f87171;
+    --bad-bg: #3b0f0f;
+    --bad-border: #7f1d1d;
+    --info-bg: #292107;
+    --info-border: #713f12;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+
+/* Visible focus, never removed without replacement (skill §1.4). */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Skip link (skill §1.5). */
+.skip-link {
+  position: absolute;
+  inset-block-start: -100%;
+  inset-inline-start: 0;
+  z-index: 1000;
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 700;
+}
+.skip-link:focus {
+  inset-block-start: 0;
+}
+
+.container {
+  width: min(92%, 72rem);
+  margin-inline: auto;
+}
+
+.site-header {
+  border-block-end: 1px solid var(--border);
+  background: var(--card);
+}
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-block: 0.75rem;
+}
+.brand {
+  font-weight: 800;
+  font-size: 1.125rem;
+  color: var(--text);
+  text-decoration: none;
+}
+.nav-list {
+  display: flex;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.nav-list a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 0.75rem;
+  color: var(--muted);
+  text-decoration: none;
+  border-radius: 0.5rem;
+}
+.nav-list a[aria-current="page"] {
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 var(--primary);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-block-start: 1.25rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding-inline: 1.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--primary);
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+  margin-block-end: 0.25rem;
+}
+.input,
+.select {
+  width: 100%;
+  min-height: 44px;
+  padding-inline: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--card);
+  color: var(--text);
+}
+.input-mono {
+  font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  overflow-wrap: break-word;
+}
+
+.chip {
+  display: inline-block;
+  font-size: 0.8125rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.chip-ok { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
+.chip-warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+.chip-bad { background: var(--bad-bg); border-color: var(--bad-border); color: var(--bad); }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.625rem;
+  margin-block-start: 1rem;
+}
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.625rem;
+}
+.stat dt {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.stat dd {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: break-word;
+}
+
+.score-track {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  height: 0.875rem;
+  margin-block-start: 0.375rem;
+  overflow: hidden;
+}
+.score-fill {
+  height: 100%;
+  border-radius: 0.5rem;
+  transition: width 200ms ease-out;
+}
+
+.explainer {
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.alert-box {
+  border: 2px solid var(--bad-border);
+  background: var(--bad-bg);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-block-start: 1rem;
+}
+.error-text {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin-block-start: 1rem;
+}
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+table.data th,
+table.data td {
+  text-align: start;
+  padding: 0.5rem 0.625rem;
+  border-block-end: 1px solid var(--border);
+  vertical-align: top;
+}
+table.data td.num,
+table.data th.num {
+  font-variant-numeric: tabular-nums;
+}
+.mono {
+  font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  overflow-wrap: break-word;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.site-footer {
+  border-block-start: 1px solid var(--border);
+  margin-block-start: 2.5rem;
+  padding-block: 1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* Reduced motion (skill §6.1). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Higher contrast on request (skill §7.6). */
+@media (prefers-contrast: more) {
+  :root {
+    --muted: #33334a;
+    --border: #33334a;
+  }
+  .btn,
+  .input,
+  .select {
+    border-width: 2px;
+  }
+}
