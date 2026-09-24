@@ -12,6 +12,7 @@ from app.routers.qr import router as qr_router
 from app.routers.feed import router as feed_router
 from app.routers.status import router as status_router
 from app.routers.obsidian import router as obsidian_router
+from app.routers.watchlist_router import router as watchlist_router
 
 app = FastAPI(title="ChainMind API", version="0.9.0-sentinel")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -23,6 +24,7 @@ app.include_router(qr_router)
 app.include_router(feed_router)
 app.include_router(status_router)
 app.include_router(obsidian_router)
+app.include_router(watchlist_router)
 
 
 @app.on_event("startup")

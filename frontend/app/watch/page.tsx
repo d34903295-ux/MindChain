@@ -40,6 +40,13 @@ type Sentinel = {
 
 type Job = { exists: boolean; n_wallets?: number; n_anomalies?: number; generated_at?: string; model?: string };
 
+type Watched = {
+  address: string;
+  label: string;
+  verificado?: boolean | null;
+  code_bytes?: number | null;
+};
+
 const POLL_MS = 12000;
 
 const FLAG_TEXT: Record<string, string> = {
@@ -80,6 +87,21 @@ export default function WatchPage() {
   const [sentinel, setSentinel] = useState<Sentinel | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false);
+  const [watchlist, setWatchlist] = useState<Watched[]>([]);
+  const [wlAddr, setWlAddr] = useState("");
+  const [wlLabel, setWlLabel] = useState("");
+  const [wlMsg, setWlMsg] = useState("");
+
+  const loadWatchlist = useCallback(() => {
+    fetch("http://localhost:8000/watchlist")
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(j => setWatchlist(j.addresses ?? []))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    loadWatchlist();
+  }, [loadWatchlist]);
 
   const loadStatus = useCallback(() => {
     fetch("http://localhost:8000/status")
@@ -222,6 +244,89 @@ export default function WatchPage() {
           </p>
         )}
       </div>
+
+      <section className="card" aria-labelledby="wl-title" style={{ marginTop: "1.5rem" }}>
+        <h2 id="wl-title" style={{ margin: 0, fontSize: "1rem" }}>
+          Wallets vigiladas
+        </h2>
+        <p style={{ color: "var(--muted)", fontSize: "0.8125rem", margin: "0.25rem 0 0.75rem" }}>
+          Señal de screening, no veredicto. Al añadir se comprueba que el contrato exista on-chain.
+        </p>
+        <form
+          className="wl-form"
+          onSubmit={async e => {
+            e.preventDefault();
+            setWlMsg("");
+            const r = await fetch("http://localhost:8000/watchlist", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ address: wlAddr.trim(), label: wlLabel.trim() || "watchlist" }),
+            });
+            const j = await r.json();
+            if (!r.ok) {
+              setWlMsg(j.detail || "No se pudo añadir");
+              return;
+            }
+            setWlAddr("");
+            setWlLabel("");
+            setWlMsg(j.added ? "Añadida y vigilada" : j.reason || "Sin cambios");
+            loadWatchlist();
+          }}
+        >
+          <div className="field">
+            <label htmlFor="wl-addr">Dirección</label>
+            <input
+              id="wl-addr"
+              className="input mono"
+              placeholder="0x…"
+              value={wlAddr}
+              onChange={e => setWlAddr(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="wl-label">Etiqueta</label>
+            <input
+              id="wl-label"
+              className="input"
+              placeholder="mixer, exchange…"
+              value={wlLabel}
+              onChange={e => setWlLabel(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn btn-secondary" disabled={!wlAddr}>
+            Vigilar
+          </button>
+        </form>
+        {wlMsg && (
+          <p role="status" style={{ fontSize: "0.8125rem", margin: "0.5rem 0 0" }}>
+            {wlMsg}
+          </p>
+        )}
+        {watchlist.length > 0 && (
+          <ul className="wl-list">
+            {watchlist.map(w => (
+              <li key={w.address}>
+                <span className="mono">{short(w.address)}</span>{" "}
+                <span className="muted">{w.label}</span>
+                {w.verificado === true && <span className="tag-ok">contrato</span>}
+                {w.verificado === null && <span className="muted">sin verificar</span>}
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  aria-label={`Dejar de vigilar ${w.address}`}
+                  onClick={async () => {
+                    await fetch(`http://localhost:8000/watchlist/${w.address}`, { method: "DELETE" });
+                    loadWatchlist();
+                  }}
+                >
+                  quitar
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {err && (
         <p role="alert" className="error-text">

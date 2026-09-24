@@ -15,6 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from agents.chains import rpc_list
+from agents.watchlist import classify_code
 
 WATCHLIST = ROOT / "agents" / "data" / "watchlist.json"
 
@@ -45,15 +46,20 @@ def main() -> int:
         for r in rpcs:
             try:
                 code = rpc_code(r, addr)
-                if code and code != "0x":
+                tipo, _ = classify_code(code)
+                if tipo == "contrato":
                     break
             except Exception:
                 continue
-        nbytes = max(len(code) - 2, 0) // 2
-        status = "OK" if nbytes > 0 else "SIN BYTECODE (descartar)"
+        tipo, nbytes = classify_code(code)
+        status = {
+            "contrato": "OK",
+            "delegado": "EOA DELEGADA EIP-7702 (descartar: no es bytecode de contrato)",
+            "eoa": "SIN BYTECODE (descartar)",
+        }[tipo]
         print(f"{addr} {label:24} bytes={nbytes:<6} {status}")
-        if nbytes == 0:
-            bad.append((addr, label, "sin bytecode"))
+        if tipo != "contrato":
+            bad.append((addr, label, tipo))
     if bad:
         print(f"\n{len(bad)} entrada(s) inválida(s). No añadas direcciones sin verificar.")
         return 1
