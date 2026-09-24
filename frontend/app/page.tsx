@@ -1,24 +1,25 @@
 import Link from "next/link";
 import { GlyphField } from "../components/GlyphField";
-import { LiveTerminal } from "../components/LiveTerminal";
+import { OpsCenter } from "../components/OpsCenter";
 import { Reveal } from "../components/Reveal";
 
 export default function Landing() {
   return (
     <main id="contenido">
       <div className="landing-wide">
-        <div className="hero-grid hero-stage">
+        <div className="hero-grid hero-stage" style={{ gridTemplateColumns: "1fr", paddingBlockEnd: "0.5rem" }}>
           <GlyphField />
-          <section aria-labelledby="hero">
+          <section aria-labelledby="hero" style={{ maxWidth: "46rem" }}>
             <p className="eyebrow hero-enter">Ethereum · Base · 7 agentes de IA</p>
             <h1 id="hero" className="hero-title-xl hero-enter hero-enter-1">
-              La cadena habla.
+              Un centro de inteligencia
               <br />
-              Nosotros <span className="accent">la vigilamos.</span>
+              blockchain que <span className="accent">nunca duerme.</span>
             </h1>
             <p className="lede hero-enter hero-enter-2">
-              ChainMind analiza cada wallet, contrato y transacción. Tú eliges la red;
-              los agentes detectan el riesgo y te lo explican en claro.
+              Siete agentes especializados trabajan en paralelo: perfilan wallets, auditan contratos,
+              rastrean transacciones, puntúan riesgo y redactan el reporte. Tú eliges la red;
+              ellos operan 24/7.
             </p>
             <div className="cta-row hero-enter hero-enter-3">
               <Link href="/wallet" className="btn">
@@ -28,13 +29,7 @@ export default function Landing() {
                 Ver vigilancia en vivo →
               </Link>
             </div>
-            <div className="hero-enter hero-enter-4">
-              <LiveTerminal />
-            </div>
-          </section>
-
-          <div className="hero-enter hero-enter-2" style={{ display: "grid", gap: "0.75rem", alignContent: "center" }}>
-            <dl className="stat-grid" aria-label="Datos del sistema" style={{ marginBlockStart: 0 }}>
+            <dl className="stat-grid hero-enter hero-enter-4" aria-label="Datos del sistema" style={{ marginBlockStart: 0 }}>
               <div className="stat">
                 <dt>Redes</dt>
                 <dd>2</dd>
@@ -52,13 +47,16 @@ export default function Landing() {
                 <dd>53/53</dd>
               </div>
             </dl>
-            <p style={{ color: "var(--muted)", fontSize: "0.9375rem", margin: 0 }}>
-              Sin cuentas ni claves para empezar. Heurísticas y ML clásico primero; el LLM
-              solo redacta explicaciones. Análisis on-demand, sin vender tus datos.
-            </p>
-          </div>
+          </section>
         </div>
       </div>
+
+      <section className="landing-wide" aria-labelledby="ops-title" style={{ paddingBlockEnd: "1rem" }}>
+        <h2 id="ops-title" className="eyebrow" style={{ textAlign: "center" }}>
+          La sala de operaciones
+        </h2>
+        <OpsCenter />
+      </section>
 
       <div className="landing-wide">
         <Reveal label="El problema">

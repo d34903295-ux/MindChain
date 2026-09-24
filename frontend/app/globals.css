@@ -683,6 +683,466 @@ img {
   border-block-end: 1px solid var(--border);
 }
 
+/* =========================================================
+   Ops Center — oficina isométrica con agentes (SVG/CSS, sin assets)
+   Paleta: blanco dominante, negro texto, azul acción, verde activo, rojo alerta.
+   ========================================================= */
+.ops {
+  --room-w: 1160px;
+  --room-h: 660px;
+  position: relative;
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
+  container-type: inline-size;
+  color: #0b1220;
+  background: radial-gradient(120% 100% at 50% 0%, #ffffff 0%, #f7f9fc 55%, #eef1f6 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  padding-block: 1.5rem 1rem;
+  overflow: hidden;
+  box-shadow: 0 40px 80px -60px rgba(15, 23, 42, 0.45);
+}
+.umb-room {
+  position: relative;
+  width: var(--room-w);
+  height: var(--room-h);
+  transform: scale(var(--ops-scale, 1));
+  transform-origin: top center;
+  margin-inline: auto;
+  perspective: 1400px;
+  perspective-origin: 50% 42%;
+}
+/* Suelo */
+.umb-floor {
+  position: absolute;
+  inset: 0;
+  transform: rotateX(58deg) rotateZ(-45deg) scale(1.42);
+  transform-style: preserve-3d;
+  transform-origin: center 58%;
+}
+.umb-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, #eceff3 1px, transparent 1px) 0 0 / 64px 64px,
+    linear-gradient(to bottom, #eceff3 1px, transparent 1px) 0 0 / 64px 64px,
+    radial-gradient(120% 90% at 50% 0%, #ffffff 0%, #f4f6f9 55%, #e9edf2 100%);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px #dfe4ea;
+}
+/* Estaciones (contadores para enderezarse en el espacio de pantalla) */
+.umb-station,
+.umb-table,
+.umb-desk,
+.umb-screens,
+.umb-screen,
+.umb-label,
+.umb-agent-sprite {
+  transform-style: preserve-3d;
+}
+.umb-station {
+  position: absolute;
+  width: 190px;
+  transform: rotateZ(45deg) rotateX(-58deg) translateZ(2px);
+  transform-origin: center;
+}
+.umb-desk {
+  position: relative;
+  width: 168px;
+  height: 74px;
+  margin: 0 auto;
+  transform-style: preserve-3d;
+}
+.umb-desk-top {
+  position: absolute;
+  inset: 0 0 18px 0;
+  background: linear-gradient(180deg, #ffffff, #f0f3f7);
+  border: 1px solid #d8dee6;
+  border-radius: 10px;
+  box-shadow: 0 18px 30px -24px rgba(15, 23, 42, 0.55);
+}
+.umb-desk-front {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 20px;
+  background: linear-gradient(180deg, #e8ecf1, #dde3ea);
+  border: 1px solid #d3dae2;
+  border-radius: 0 0 8px 8px;
+}
+/* Pantallas: una por estación, con barras que “escriben” datos */
+.umb-screens {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: -96px;
+  transform: translateZ(26px);
+}
+.umb-screen {
+  width: 82px;
+  height: 58px;
+  background: linear-gradient(180deg, #0d1b2a, #0a1420);
+  border: 1px solid #1d2c3f;
+  border-radius: 7px;
+  padding: 5px 6px;
+  box-shadow: 0 12px 22px -18px rgba(2, 8, 20, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+.umb-screen.is-alert {
+  border-color: rgba(220, 38, 38, 0.6);
+}
+.umb-screen-top {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 5px;
+}
+.umb-screen-top span {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+}
+.umb-screen-top-dim {
+  background: #475569 !important;
+}
+.umb-screen-body {
+  display: grid;
+  gap: 4px;
+}
+.umb-line {
+  height: 5px;
+  border-radius: 999px;
+  background: #16243a;
+  overflow: hidden;
+}
+.umb-line-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  opacity: 0.85;
+  animation: umb-line 2.8s ease-in-out infinite;
+  transform-origin: left center;
+}
+@keyframes umb-line {
+  0%, 100% { transform: scaleX(0.25); opacity: 0.5; }
+  50% { transform: scaleX(1); opacity: 0.95; }
+}
+/* Sprite del agente: microanimación tipo respiración + barrido de pantalla */
+.agent-sprite {
+  position: relative;
+  width: 44px;
+  height: 62px;
+  margin: -6px auto 0;
+  transform: translateZ(40px);
+  animation: umb-agent 4.2s ease-in-out infinite;
+}
+@keyframes umb-agent {
+  0%, 100% { transform: translateZ(40px) translateY(0); }
+  50% { transform: translateZ(40px) translateY(-2px); }
+}
+.agent-body {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 44px;
+  border-radius: 12px 12px 8px 8px;
+  opacity: 0.9;
+}
+.agent-head {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  border: 2px solid #2563eb;
+  border-radius: 999px;
+  background: #fff;
+}
+.agent-monitor {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 34px;
+  height: 22px;
+  margin-left: -17px;
+  background: #0d1b2a;
+  border: 1px solid #1d2c3f;
+  border-radius: 5px;
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.agent-monitor span {
+  width: 3px;
+  height: 12px;
+  border-radius: 999px;
+  animation: umb-bars 1.6s ease-in-out infinite;
+}
+.agent-monitor span:last-child { animation-delay: 240ms; }
+@keyframes umb-bars {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+.agent-ping,
+.agent-alarm {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #16a34a;
+  border-radius: 999px;
+}
+.agent-ping { animation: umb-ping 2s ease-out infinite; }
+.agent-alarm { border-color: #dc2626; animation: umb-ping 1.2s ease-out infinite; }
+@keyframes umb-ping {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+/* Etiqueta flotante del agente */
+.umb-label {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(30px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px -18px rgba(15, 23, 42, 0.5);
+  white-space: nowrap;
+}
+.umb-label strong {
+  display: block;
+  font-size: 11px;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+.umb-label em {
+  display: block;
+  font-style: normal;
+  font-size: 10px;
+  color: #64748b;
+  line-height: 1.1;
+}
+.umb-label-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+/* Mesa central con grafo */
+.umb-table {
+  position: absolute;
+  left: 600px;
+  top: 430px;
+  transform: rotateZ(45deg) rotateX(-58deg) translateZ(4px);
+  transform-origin: center;
+  width: 420px;
+}
+.umb-table-top {
+  position: relative;
+  background: linear-gradient(180deg, #eef2f7, #e2e8f0);
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  box-shadow: 0 30px 50px -34px rgba(15, 23, 42, 0.6);
+  overflow: hidden;
+}
+.umb-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  background:
+    radial-gradient(90% 70% at 50% 30%, #ffffff 0%, #eef3f9 60%, #e2e8f0 100%);
+}
+.umb-table-legend {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: #475569;
+}
+.umb-table-legend span { display: flex; align-items: center; gap: 5px; }
+.umb-table-legend i { width: 8px; height: 8px; border-radius: 999px; }
+.umb-table-front {
+  height: 22px;
+  margin: 0 12px;
+  background: linear-gradient(180deg, #d7dee7, #cbd5e1);
+  border-radius: 0 0 10px 10px;
+  border: 1px solid #c2cbd6;
+  border-top: none;
+}
+/* Paredes con mural de actividad */
+.umb-wall {
+  position: absolute;
+  transform-origin: bottom center;
+}
+.umb-wall-back {
+  left: 0;
+  bottom: 46%;
+  width: 100%;
+  height: 200px;
+  transform: rotateX(-20deg) translateZ(6px);
+  background: linear-gradient(180deg, #fbfcfe, #eef2f6);
+  border-top: 1px solid #dde3ea;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 22px;
+}
+.umb-wall-side {
+  right: -3%;
+  bottom: 46%;
+  width: 26%;
+  height: 220px;
+  transform: rotateZ(0deg) rotateY(58deg) translateZ(4px);
+  background: linear-gradient(180deg, #f8fafc, #edf1f5);
+  border-left: 1px solid #dde3ea;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.umb-side-panel {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  line-height: 2;
+}
+.umb-side-panel strong {
+  display: block;
+  color: #0b1220;
+  font-size: 26px;
+  letter-spacing: 0.02em;
+}
+.umb-wall-board {
+  width: 62%;
+  min-width: 520px;
+  background: #0b1522;
+  border: 1px solid #1d2c3f;
+  border-radius: 12px;
+  color: #e2e8f0;
+  padding: 10px 14px;
+  box-shadow: 0 26px 44px -34px rgba(2, 8, 20, 0.9);
+}
+.umb-board-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.umb-board-live {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #16a34a;
+  animation: umb-ping 2s ease-out infinite;
+}
+.umb-wall-board ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.umb-wall-board li {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: #0f1d2c;
+  animation: umb-row 5s ease-in-out infinite;
+}
+@keyframes umb-row {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+.umb-wall-board li.is-alert {
+  background: rgba(220, 38, 38, 0.14);
+  box-shadow: inset 2px 0 0 #dc2626;
+}
+.umb-wall-board li.is-empty { color: #64748b; }
+.umb-board-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #93c5fd;
+  text-align: end;
+}
+.umb-board-hash { color: #64748b; font-family: var(--font-mono), monospace; }
+/* Barra frontal de sala */
+.umb-desk-front-bar {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  width: min(94%, 1180px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  background: linear-gradient(180deg, #ffffff, #f1f4f8);
+  border: 1px solid #dde3ea;
+  border-radius: 14px;
+  box-shadow: 0 -8px 30px -20px rgba(15, 23, 42, 0.35);
+  font-size: 12px;
+  color: #475569;
+}
+.umb-status { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+.umb-status i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #16a34a;
+  animation: umb-ping 2.4s ease-out infinite;
+}
+.umb-brand { font-weight: 800; letter-spacing: 0.01em; color: #0b1220; }
+.umb-clock { font-family: var(--font-mono), monospace; font-variant-numeric: tabular-nums; }
+/* Escala responsive del isometrico */
+@container (max-width: 1180px) {
+  .ops { --ops-scale: 0.9; }
+}
+@container (max-width: 1000px) {
+  .ops { --ops-scale: 0.78; }
+}
+@container (max-width: 820px) {
+  .ops { --ops-scale: 0.66; }
+}
+@container (max-width: 640px) {
+  .ops { --ops-scale: 0.54; }
+}
+@container (max-width: 480px) {
+  .ops { --ops-scale: 0.45; }
+}
+/* Reduced motion:-office sigue legible, sin animaciones */
+@media (prefers-reduced-motion: reduce) {
+  .umb-line-bar,
+  .agent-sprite,
+  .agent-monitor span,
+  .agent-ping,
+  .agent-alarm,
+  .umb-board-live,
+  .umb-status i,
+  .umb-wall-board li {
+    animation: none !important;
+  }
+}
+
 /* ------- Selección ------- */
 ::selection {
   background: var(--primary);
