@@ -79,8 +79,9 @@ export default function WatchPage() {
   const sinceRef = useRef<number | null>(null);
   const [sentinel, setSentinel] = useState<Sentinel | null>(null);
   const [job, setJob] = useState<Job | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  const loadStatus = useCallback(() => {
     fetch("http://localhost:8000/status")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((j) => {
@@ -90,6 +91,10 @@ export default function WatchPage() {
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
+
   const load = useCallback(
     async (reset = false) => {
       setLoading(true);
@@ -97,6 +102,11 @@ export default function WatchPage() {
         const since = reset ? null : sinceRef.current;
         const q = since ? `?since=${since}&max_blocks=3` : `?max_blocks=2`;
         const r = await fetch(`http://localhost:8000/feed/${chain}${q}`);
+        if (r.status === 429) {
+          // el guard nos frena: no es un fallo, solo hay que esperar
+          setBusy(true);
+          return;
+        }
         if (!r.ok) throw new Error(`El backend devolvió ${r.status}`);
         const j: Feed = await r.json();
         sinceRef.current = j.latest;
@@ -104,13 +114,15 @@ export default function WatchPage() {
         setSeen(s => s + j.n_txs);
         setAlertTotal(s => s + j.n_alerts);
         setErr("");
+        setBusy(false);
+        loadStatus();
       } catch (e: unknown) {
         setErr(`Sin datos. ¿Backend en :8000? ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setLoading(false);
       }
     },
-    [chain]
+    [chain, loadStatus]
   );
 
   useEffect(() => {
@@ -185,6 +197,7 @@ export default function WatchPage() {
           {feed
             ? `Bloque ${feed.latest} · vigiladas ${seen} · alertas ${alertTotal}`
             : "Conectando con la red…"}
+          {busy && " · saturado, reintentando…"}
           {feed?.median_eth != null && (
             <>
               {" · "}mediana {feed.median_eth} ETH
