@@ -1,157 +1,118 @@
-"use client";
+import Link from "next/link";
 
-import { useState } from "react";
-import { Chip, ScoreBar, Stat, riskTone } from "../components/ui";
-
-type Report = {
-  address: string;
-  chain: string;
-  profile: Record<string, unknown>;
-  risk_score: number;
-  risk_factors: string[];
-  explanation: string;
-  elapsed_s?: number;
-  source?: string;
-};
-
-function str(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (Array.isArray(v)) return v.join(", ") || "—";
-  return String(v);
-}
-
-export default function Home() {
-  const [addr, setAddr] = useState("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
-  const [chain, setChain] = useState("ethereum");
-  const [res, setRes] = useState<Report | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-
-  const analyze = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setErr("");
-    setRes(null);
-    try {
-      const r = await fetch("http://localhost:8000/analyze-wallet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: addr.trim(), chain }),
-      });
-      if (!r.ok) throw new Error(`El backend devolvió ${r.status}`);
-      setRes(await r.json());
-    } catch (e: unknown) {
-      setErr(`No se pudo analizar. ¿Backend en :8000? ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+export default function Landing() {
   return (
-    <main id="contenido" className="container" style={{ paddingBlock: "1.5rem" }}>
-      <h1>Wallet Intelligence</h1>
-      <p style={{ color: "var(--muted)" }}>
-        Pega una dirección y obtén perfil, score de riesgo y explicación en menos de 10 segundos.
-      </p>
-
-      <form onSubmit={analyze} aria-label="Analizar wallet">
-        <div className="field" style={{ maxWidth: "12rem" }}>
-          <label htmlFor="chain">Red</label>
-          <select
-            id="chain"
-            className="select"
-            value={chain}
-            onChange={e => setChain(e.target.value)}
-          >
-            <option value="ethereum">Ethereum</option>
-            <option value="base">Base</option>
-          </select>
-        </div>
-        <div className="field" style={{ marginBlockStart: "0.75rem" }}>
-          <label htmlFor="addr">Dirección (0x + 40 caracteres hex)</label>
-          <input
-            id="addr"
-            className="input input-mono"
-            value={addr}
-            onChange={e => setAddr(e.target.value)}
-            placeholder="0x…"
-            required
-            minLength={42}
-            maxLength={42}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-        <button type="submit" className="btn" disabled={loading} style={{ marginBlockStart: "0.75rem" }}>
-          {loading ? "Analizando…" : "Analizar"}
-        </button>
-      </form>
-
-      {err && (
-        <p role="alert" className="error-text">
-          {err}
+    <main id="contenido" className="container" style={{ paddingBlock: "2rem" }}>
+      <section aria-labelledby="hero">
+        <p
+          style={{
+            display: "inline-block",
+            fontSize: "0.8125rem",
+            fontWeight: 700,
+            color: "var(--ok)",
+            background: "var(--ok-bg)",
+            border: "1px solid var(--ok-border)",
+            borderRadius: "999px",
+            padding: "0.2rem 0.75rem",
+          }}
+        >
+          Ethereum · Base · en vivo
         </p>
-      )}
-
-      {res && (
-        <section aria-live="polite" aria-label="Resultado del análisis" className="card">
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <img
-              src={`http://localhost:8000/qr/${res.address}`}
-              width={96}
-              height={96}
-              alt={`Código QR de la dirección ${res.address}`}
-            />
-            <div>
-              <h2 className="mono" style={{ fontSize: "1rem", margin: 0 }}>
-                {res.address}
-              </h2>
-              <p style={{ color: "var(--muted)", fontSize: "0.875rem", margin: 0 }}>
-                {res.chain} · {res.elapsed_s}s servidor · fuente {res.source} ·{" "}
-                <a
-                  href={`http://localhost:8000/report/${res.address}?chain=${chain}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Descargar reporte .md
-                </a>
-              </p>
-            </div>
+        <h1 id="hero" style={{ fontSize: "clamp(2rem, 1.4rem + 3vw, 3rem)", lineHeight: 1.15, marginBlockEnd: "0.5rem" }}>
+          Inteligencia blockchain con agentes de IA que vigilan solos
+        </h1>
+        <p style={{ fontSize: "1.125rem", color: "var(--muted)", maxWidth: "44rem" }}>
+          <strong>Qué es:</strong> ChainMind es un sistema multi-agente que analiza wallets, contratos
+          y transacciones en Ethereum y Base. Tú eliges una red o pegas una dirección; los agentes
+          hacen el resto: perfilan, puntúan el riesgo, detectan anomalías y generan el reporte.
+        </p>
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBlockStart: "1.25rem" }}>
+          <Link href="/wallet" className="btn">
+            Analizar una wallet
+          </Link>
+          <Link href="/watch" className="btn btn-secondary">
+            Ver vigilancia en vivo
+          </Link>
+          <Link href="/contract" className="btn btn-secondary">
+            Auditar un contrato
+          </Link>
+        </div>
+        <dl className="stat-grid" aria-label="Datos del sistema">
+          <div className="stat">
+            <dt>Redes vigiladas</dt>
+            <dd>2 (Ethereum, Base)</dd>
           </div>
-
-          <div style={{ marginBlockStart: "1rem" }}>
-            <ScoreBar value={res.risk_score} label="Riesgo" />
-            <div style={{ marginBlockStart: "0.5rem", display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
-              {res.risk_factors.length === 0 ? (
-                <Chip tone="ok">sin factores de riesgo</Chip>
-              ) : (
-                res.risk_factors.map(f => (
-                  <Chip key={f} tone={riskTone(res.risk_score)}>
-                    {f}
-                  </Chip>
-                ))
-              )}
-            </div>
+          <div className="stat">
+            <dt>Agentes de IA</dt>
+            <dd>7</dd>
           </div>
+          <div className="stat">
+            <dt>Reporte completo en</dt>
+            <dd>&lt;10 segundos</dd>
+          </div>
+        </dl>
+      </section>
 
-          <h3>Perfil</h3>
-          <dl className="stat-grid">
-            <Stat term="Txs lifetime">{str(res.profile.tx_count)}</Stat>
-            <Stat term="Antigüedad (días)">{str(res.profile.age_days)}</Stat>
-            <Stat term="Actividad">{str(res.profile.activity)}</Stat>
-            <Stat term="Frec. tx/día">{str(res.profile.freq_tx_day)}</Stat>
-            <Stat term="Balance USD">
-              ${Number(res.profile.balance_usd || 0).toLocaleString("es")}
-            </Stat>
-            <Stat term="Contrapartes (muestra)">{str(res.profile.counterparties_sample)}</Stat>
-            <Stat term="Bot-like">{str(res.profile.bot_like)}</Stat>
-            <Stat term="Etiquetas">{str(res.profile.labels)}</Stat>
-          </dl>
+      <section aria-labelledby="para-que" className="card">
+        <h2 id="para-que">¿Para qué sirve?</h2>
+        <ul style={{ paddingInlineStart: "1.125rem", margin: 0 }}>
+          <li>
+            <strong>Verificar antes de enviar:</strong> pega la dirección de una contraparte y descubre
+            si interactuó con mezcladores o muestra patrones de bot.
+          </li>
+          <li>
+            <strong>Auditar contratos:</strong> detecta permisos peligrosos (mint privilegiado,
+            blacklist, pausa centralizada, DELEGATECALL, SELFDESTRUCT) antes de interactuar.
+          </li>
+          <li>
+            <strong>Vigilar la red:</strong> el panel en vivo puntúa cada transacción de los últimos
+            bloques y levanta alertas solo.
+          </li>
+          <li>
+            <strong>Documentar casos:</strong> descarga el reporte en Markdown con perfil, riesgo,
+            rutas de fondos y explicación.
+          </li>
+        </ul>
+      </section>
 
-          <h3>Explicación</h3>
-          <p className="explainer">{res.explanation}</p>
-        </section>
-      )}
+      <section aria-labelledby="como-se-usa" className="card">
+        <h2 id="como-se-usa">¿Cómo se usa?</h2>
+        <ol style={{ paddingInlineStart: "1.25rem", margin: 0 }}>
+          <li>
+            <strong>Elige red y objetivo:</strong> en <Link href="/wallet">Wallet</Link> selecciona
+            Ethereum o Base y pega una dirección 0x. En <Link href="/watch">Vigilancia</Link> solo
+            elige la red: los agentes ya están mirando cada transacción.
+          </li>
+          <li>
+            <strong>Lee el score y la explicación:</strong> 0–29 bajo, 30–69 medio, 70–100 alto.
+            Cada factor de riesgo viene explicado en lenguaje claro, con QR de la dirección para
+            compartirla o escanearla.
+          </li>
+          <li>
+            <strong>Profundiza o descarga:</strong> traza rutas de fondos, audita el contrato en{" "}
+            <Link href="/contract">Contrato</Link> o descarga el reporte .md del caso.
+          </li>
+        </ol>
+        <p style={{ color: "var(--muted)", fontSize: "0.875rem" }}>
+          Requisito: el backend debe estar en <span className="mono">http://localhost:8000</span> y
+          esta app en <span className="mono">http://localhost:3000</span>. Sin claves de API funciona
+          con fuentes públicas; con <span className="mono">ANTHROPIC_API_KEY</span> las explicaciones
+          las redacta Claude.
+        </p>
+      </section>
+
+      <section aria-labelledby="agentes" className="card">
+        <h2 id="agentes">Los 7 agentes</h2>
+        <ul style={{ paddingInlineStart: "1.125rem", margin: 0 }}>
+          <li><strong>Wallet Intelligence:</strong> antigüedad, transacciones, contrapartes y patrón horario (humano vs. bot).</li>
+          <li><strong>Risk Scoring:</strong> heurísticas sin ML: mezcladores, wallet nueva, concentración de fondos, balance alto y joven.</li>
+          <li><strong>Explanation:</strong> el único que llama al LLM; traduce el score a lenguaje humano.</li>
+          <li><strong>Smart Contract:</strong> disassembler EVM + heurísticas de permisos + Slither opcional.</li>
+          <li><strong>Anomaly Detection:</strong> Isolation Forest en batch nocturno sobre frecuencia, montos y gas.</li>
+          <li><strong>Investigation:</strong> trazado de rutas de fondos (BFS + Cypher en Neo4j).</li>
+          <li><strong>Report:</strong> reporte descargable del caso.</li>
+        </ul>
+      </section>
     </main>
   );
 }
