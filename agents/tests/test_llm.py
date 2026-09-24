@@ -242,11 +242,43 @@ def test_trunca_textos_absurdos():
     assert len(r) <= 2300
 
 
+def test_recorta_aunque_el_proveedor_diga_stop():
+    """Un modelo puede detenerse a media palabra y reportar 'stop'."""
+    medio = "La cuenta tiene muchas contrapartes. Conviene revisar los destinos"
+    limpio, m = llm.validate_explanation(medio, truncado=False)
+    assert m == "ok"
+    assert limpio.startswith("La cuenta tiene muchas contrapartes.")
+    assert "Conviene revisar los destinos" not in limpio
+
+
+def test_no_toca_texto_que_ya_ends_bien():
+    bueno = "El patrón es inusual. Conviene revisar el destino on-chain."
+    limpio, _ = llm.validate_explanation(bueno, truncado=False)
+    assert limpio.startswith("El patrón es inusual. Conviene revisar el destino on-chain.")
+
+
 def test_rechaza_texto_que_invierte_el_score():
     """Un 1.5B local decía 'score 10/100 sugiere una alta confianza'."""
     texto = "El score heurístico de 10/100 sugiere una alta confianza en el patrón."
     r, motivo = llm.validate_explanation(texto, score=10)
-    assert r is None
+    assert r is None and "incoherencia" in motivo, "si solo hay la frase mala, se cae al texto fijo"
+
+
+def test_conserva_el_resto_tras_quitar_la_incoherencia():
+    texto = ("La cuenta tiene 380 contrapartes y 1420 transacciones. "
+             "El score de 62/100 indica una confianza alta en el análisis. "
+             "Conviene revisar los destinos on-chain.")
+    limpio, _ = llm.validate_explanation(texto, score=62)
+    assert "380 contrapartes" in limpio
+    assert "confianza alta" not in limpio
+    assert "revisar los destinos" in limpio
+    assert "no un veredicto" in limpio
+
+
+def test_rechaza_si_todo_es_incoherente():
+    texto = "El score indica una confianza alta. El score sugiere confianza total."
+    r, motivo = llm.validate_explanation(texto, score=62)
+    assert r is None and "incoherencia" in motivo
 
 
 def test_acepta_coherente_con_el_score():
@@ -256,9 +288,17 @@ def test_acepta_coherente_con_el_score():
 
 
 def test_contradiccion_con_score_alto():
-    texto = "No se observan riesgos relevantes en este contrato."
-    r, motivo = llm.validate_explanation(texto, score=85)
-    assert r is None and "contradice" in motivo
+    texto = ("Este contrato tiene permisos delegatecall y no se verifican. "
+             "No se observan riesgos relevantes en este contrato.")
+    limpio, _ = llm.validate_explanation(texto, score=85)
+    assert "no se observan riesgos" not in limpio.lower()
+    assert "delegatecall" in limpio
+
+
+def test_score_alto_nunca_se_presenta_como_seguro():
+    texto = "El contrato tiene un único permiso de owner sin más. Riesgo bajo."
+    r, motivo = llm.validate_explanation(texto, score=90)
+    assert r is None or "riesgo bajo" not in r.lower()
 
 
 def test_sin_score_no_hay_contradiccion_que_buscar():

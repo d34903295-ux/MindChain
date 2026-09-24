@@ -15,9 +15,12 @@ def clean_state(monkeypatch):
         "alerts_delivered": 0, "last_block": {}, "last_run": None, "last_error": None,
         "chains": [], "started_at": None,
     })
+    # parar antes de limpiar: si el hilo de un test anterior siguiera vivo,
+    # escribiría en este estado compartido y fallaría el caso siguiente
+    sentinel.stop(timeout=10)
     sentinel._stop.clear()
     yield
-    sentinel._stop.set()
+    sentinel.stop(timeout=10)
 
 
 def _feed(n_alerts=1, new_alerts=None, block=100):
@@ -130,3 +133,23 @@ def test_usa_since_para_no_releer_bloques(monkeypatch):
     eth = [s for c, s in vistos if c == "ethereum"]
     assert eth[0] is None
     assert eth[1] == 300  # segundo ciclo no relee bloques ya vistos
+
+
+def test_stop_espera_al_hilo():
+    """Sin join, el hilo sobrevive al apagado y sigue tocando el estado."""
+    import time as _t
+    monkey = pytest.MonkeyPatch()
+    monkey.setenv("CHAINMIND_SENTINEL", "1")
+    monkey.setattr(sentinel, "INTERVAL", 3600)
+    monkey.setattr(sentinel, "CHAINS", ["ethereum"])
+    monkey.setattr(sentinel.watcher, "scan", lambda *a, **k: _feed(n_alerts=0, new_alerts=[]))
+    try:
+        sentinel.start()
+        _t.sleep(0.2)
+        res = sentinel.stop(timeout=10)
+        assert res["stopped"] is True
+        ciclos = sentinel.state["cycles"]
+        _t.sleep(0.4)
+        assert sentinel.state["cycles"] == ciclos, "el hilo no debe seguir corriendo tras stop()"
+    finally:
+        monkey.undo()

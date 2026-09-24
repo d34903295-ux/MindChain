@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     template: "%s · ChainMind",
   },
   description:
-    "Siete agentes de IA vigilan wallets, contratos y transacciones en Ethereum y Base. Perfil, score de riesgo y reporte en menos de 10 segundos.",
+    "Siete agentes de IA vigilan wallets, contratos y transacciones en Ethereum y Base. Perfil, score de riesgo y reporte con IA local o en la nube.",
   applicationName: "ChainMind",
   keywords: ["blockchain intelligence", "anomalías", "Ethereum", "Base", "agents IA", "on-chain"],
   openGraph: {

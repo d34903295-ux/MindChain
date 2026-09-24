@@ -23,9 +23,9 @@ export default function Landing() {
               />
             </h1>
             <p className="lede hero-enter hero-enter-2">
-              Siete agentes especializados trabajan en paralelo: perfilan wallets, auditan contratos,
-              rastrean transacciones, puntúan riesgo y redactan el reporte. Tú eliges la red;
-              ellos operan 24/7.
+              Siete agentes especializados: perfilan wallets, auditan contratos, rastrean
+              transacciones, puntúan riesgo y redactan la explicación. Tú eliges la red; el
+              centinela sigue vigilando cuando cierras el panel.
             </p>
             <div className="cta-row hero-enter hero-enter-3">
               <Magnetic>

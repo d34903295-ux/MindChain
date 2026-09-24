@@ -24,7 +24,7 @@ detecta y usa un modelo local (gratis, sin clave y sin sacar datos de tu
 máquina):
 
 ```bash
-ollama pull qwen2.5:1.5b    # o un modelo mayor: qwen2.5:7b
+ollama pull qwen2.5:7b    # 7B es el mínimo que responde bien: con 1.5B acusa
 ```
 
 Para usar un proveedor en la nube basta con poner su clave en `.env`; ChainMind

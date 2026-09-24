@@ -44,6 +44,7 @@ state = {
 
 _lock = threading.Lock()
 _stop = threading.Event()
+_thread: threading.Thread | None = None
 
 
 def is_enabled() -> bool:
@@ -131,18 +132,29 @@ def _loop():
 
 
 def start():
+    global _thread
     if not is_enabled():
         return {"started": False, "reason": "desactivado (CHAINMIND_SENTINEL != 1)"}
-    if state["enabled"]:
+    if state["enabled"] and _thread is not None and _thread.is_alive():
         return {"started": False, "reason": "ya-en-ejecucion"}
+    _stop.clear()
     state.update({"enabled": True, "running": True, "chains": [c for c in CHAINS if c in supported()]})
-    threading.Thread(target=_loop, name="chainmind-sentinel", daemon=True).start()
+    _thread = threading.Thread(target=_loop, name="chainmind-sentinel", daemon=True)
+    _thread.start()
     return {"started": True, "interval_s": INTERVAL, "chains": state["chains"]}
 
 
-def stop():
+def stop(timeout: float = 5.0):
+    """Detiene el centinela y espera al hilo. Sin el join, el hilo sobrevive al
+    apagado (y en tests contamina el caso siguiente con su estado compartido)."""
+    global _thread
     _stop.set()
     state["enabled"] = False
+    if _thread is not None and _thread.is_alive():
+        _thread.join(timeout)
+        if _thread.is_alive():
+            return {"stopped": False, "motivo": "el hilo sigue en un ciclo largo"}
+    _thread = None
     return {"stopped": True}
 
 

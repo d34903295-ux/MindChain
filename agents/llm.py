@@ -47,7 +47,7 @@ PRIORITY = ("ollama", "anthropic", "openai", "gemini", "groq", "openrouter")
 PROVIDERS: dict[str, dict] = {
     "ollama": {
         "url": os.getenv("OLLAMA_URL", "http://127.0.0.1:11434"),
-        "model": os.getenv("CHAINMIND_LLM_MODEL_OLLAMA", "qwen2.5:1.5b"),
+        "model": os.getenv("CHAINMIND_LLM_MODEL_OLLAMA", "qwen2.5:7b"),
         "style": "ollama",
         "env": None,
         "price_in": 0.0, "price_out": 0.0,
@@ -166,6 +166,36 @@ def _record_success(provider: str) -> None:
         _stats["ok"] += 1
 
 
+def ollama_models() -> list[str]:
+    """Modelos instalados en Ollama. Permite avisar si el configurado no existe."""
+    try:
+        url = PROVIDERS["ollama"]["url"].rstrip("/") + "/api/tags"
+        req = urllib.request.Request(url, headers={"User-Agent": "ChainMind/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.load(r)
+        return [m.get("name", "") for m in (data.get("models") or []) if m.get("name")]
+    except Exception:
+        return []
+
+
+def ollama_sugerido() -> str | None:
+    """Si el modelo configurado no está, propone el más grande instalado."""
+    instalados = ollama_models()
+    if not instalados:
+        return None
+    if PROVIDERS["ollama"]["model"] in instalados:
+        return None
+    generadores = [m for m in instalados if "embed" not in m.lower() and "vision" not in m.lower()]
+    if not generadores:
+        return None
+
+    def tamano(nombre: str) -> float:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*b\b", nombre.lower())
+        return float(m.group(1)) if m else 0.0
+
+    return max(generadores, key=tamano)
+
+
 def status() -> dict:
     """Auditable desde /status: qué IA está activa, cuánto costó y si falla."""
     with _lock:
@@ -176,7 +206,7 @@ def status() -> dict:
         cache_n = len(_cache)
     breakers = {p: {"failures": f, "abierta": breaker_open(p)} for p, f in pendientes}
     act = active()
-    return {
+    out = {
         "provider": act,
         "model": model_of(act),
         "local": is_local(act),
@@ -191,6 +221,17 @@ def status() -> dict:
             if act else None
         ),
     }
+    if act == "ollama":
+        instalados = ollama_models()
+        out["modelos_instalados"] = instalados
+        if instalados and model_of(act) not in instalados:
+            sugerencia = ollama_sugerido()
+            out["aviso"] = (
+                f"el modelo '{model_of(act)}' no está instalado; "
+                + (f"usa `{sugerencia}` (CHAINMIND_LLM_MODEL_OLLAMA) o `ollama pull {model_of(act)}`"
+                   if sugerencia else "los agentes caerán al texto determinista")
+            )
+    return out
 
 
 # ------------------------------------------------------------------ payload
@@ -362,6 +403,11 @@ INVENTADAS = (
     r"\bseg[úu]n (?:los|las) (?:medios|noticias|informes)\b", r"\bse ha documentado que\b",
     r"\bpresuntamente es\b", r"\bse presume que\b", r"\bevidentemente es\b",
     r"\btal como muestra el gr[áa]fico\b",
+)
+
+# Coherencia: el análisis es aprovechable aunque quite una frase. Se eliminan
+# en vez de tirar la respuesta entera; si no queda nada útil, cae al texto fijo.
+INCOHERENTES = (
     # la confianza sale de `sample_confidence` en nuestros datos, nunca del score
     r"\bscore\b[^\.]{0,50}\bconfianza\b", r"\bconfianza\b[^\.]{0,30}\bscore\b",
 )
@@ -411,6 +457,37 @@ def _limpiar_texto(text: str) -> str:
     return limpio
 
 
+def _oraciones(texto: str) -> list[str]:
+    partes = re.split(r"(?<=[.!?…])\s+", texto.replace("\n", " "))
+    return [p for p in (x.strip() for x in partes) if p]
+
+
+def _quitar_incoherentes(texto: str, score: int | None) -> tuple[str, int]:
+    """Elimina las frases que contradicen el score o le atribuyen confianza.
+
+    Se descartan en lugar de rechazar todo el texto: el resto del análisis sigue
+    siendo válido y el score lo calcula nuestro código, no el modelo.
+    """
+    if score is None and not any(re.search(p, texto, re.I) for p in INCOHERENTES):
+        return texto, 0
+    patrones = list(INCOHERENTES)
+    if score is not None:
+        if score < 30:
+            patrones += list(RIESGO_ALTO)
+        elif score >= 70:
+            patrones += list(RIESGO_BAJO)
+    quitadas = 0
+    quedan = []
+    for oracion in _oraciones(texto):
+        if any(re.search(p, oracion, re.I) for p in patrones):
+            quitadas += 1
+            continue
+        quedan.append(oracion)
+    if not quitadas:
+        return texto, 0
+    return " ".join(quedan).strip(), quitadas
+
+
 def _cortar_en_oracion(texto: str) -> str:
     """Deja el texto en la última oración completa: 'Comprobar si ' no es una frase."""
     if re.search(r"[.!?…:;)\]]\s*$", texto):
@@ -434,16 +511,20 @@ def validate_explanation(text: str, score: int | None = None, truncado: bool = F
         return None, "vacío"
     limpio = _limpiar_texto(text)
     limpio = re.sub(r"\n{3,}", "\n\n", limpio)
-    if truncado:
+    # No basta con el aviso del proveedor: un modelo puede detenerse él mismo a
+    # media palabra y reportar "stop". Si no acaba en puntuación, se recorta.
+    if truncado or not re.search(r"[.!?:…»)\]]\s*$", limpio):
         limpio = _cortar_en_oracion(limpio)
     for etiqueta, patrones in (("acusación", ACUSACIONES), ("intención", INTENCIONES),
                                ("invención", INVENTADAS), ("metatexto", META)):
         for p in patrones:
             if re.search(p, limpio, re.I):
                 return None, f"{etiqueta}:{p}"
-    contradiccion = _contradice_score(limpio, score)
-    if contradiccion:
-        return None, contradiccion
+    limpio, quitadas = _quitar_incoherentes(limpio, score)
+    if not limpio:
+        return None, "incoherencia: todas las frases contradicen el score"
+    if quitadas:
+        limpio = re.sub(r"\n{3,}", "\n\n", limpio).strip()
     if len(limpio) > 2200:
         limpio = limpio[:2200].rsplit(".", 1)[0] + "."
     if "no un veredicto" not in limpio.lower() and "no es asesoramiento" not in limpio.lower():

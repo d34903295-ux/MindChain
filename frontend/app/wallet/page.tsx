@@ -66,8 +66,9 @@ export default function WalletPage() {
         <p className="eyebrow">Wallet Intelligence</p>
         <h1 className="page-title">Analiza una wallet</h1>
         <p className="section-lede">
-          Perfil, score de riesgo y explicación en menos de 10 segundos. Los agentes Wallet, Research,
-          Risk y Explanation trabajan en paralelo.
+          Los agentes Wallet, Risk y Explanation trabajan en cadena: primero los datos on-chain y el
+          score, después la explicación. El score sale en segundos; la redacción por IA local añade
+          unos segundos más.
         </p>
       </header>
 
