@@ -12,10 +12,13 @@ from fastapi import APIRouter
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(ROOT / "backend") not in sys.path:
+    sys.path.insert(0, str(ROOT / "backend"))
 
-from agents import price, watchlist
-from agents.fetcher import cache_stats
+from agents import price, sentinel, watchlist
 from agents.chains import supported
+from agents.fetcher import cache_stats
+from app.guard import stats as guard_stats
 
 router = APIRouter()
 
@@ -43,13 +46,13 @@ def latest_anomaly_job() -> dict:
 @router.get("/status")
 def status():
     price.get_price_usd()  # calienta la caché para reportar el estado real
-    from agents import sentinel
     return {
         "ok": True,
         "chains": supported(),
         "price": price.cache_info(),
         "watchlist": watchlist.info(),
         "fetch_cache": cache_stats(),
+        "guard": guard_stats(),
         "sentinel": sentinel.status(),
         "anomaly_job": latest_anomaly_job(),
     }

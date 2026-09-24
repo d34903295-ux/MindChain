@@ -37,6 +37,16 @@ def analyze_wallet(payload: AnalyzeRequest):
         get_chain(payload.chain)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    from app.guard import Busy, work
+    try:
+        # sin `key`: un análisis siempre se recalcula (dato fresco), solo se limita la carga
+        with work("analyze:wallet"):
+            return _analyze_wallet(payload)
+    except Busy as e:
+        raise HTTPException(status_code=429, detail=str(e), headers={"Retry-After": str(e.retry_after)})
+
+
+def _analyze_wallet(payload: AnalyzeRequest) -> dict:
     t0 = time.time()
     fetched = fetch_wallet_data(payload.address, chain=payload.chain)
     profile, txs = build_profile(payload.address, fetched)
