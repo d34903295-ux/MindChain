@@ -47,23 +47,23 @@ export default function Landing() {
                 <dd>7</dd>
               </div>
               <div className="stat">
-                <dt>Reporte en</dt>
-                <dd>&lt;10 s</dd>
+                <dt>Análisis</dt>
+                <dd className="mono">~7 s</dd>
               </div>
               <div className="stat">
                 <dt>Tests</dt>
-                <dd>53/53</dd>
+                <dd className="mono">243</dd>
               </div>
             </dl>
           </section>
         </div>
       </div>
 
-      <section className="landing-wide" aria-labelledby="ops-title" style={{ paddingBlock: "3.5rem 1rem" }}>
+      <section className="ops-host" aria-labelledby="ops-title" style={{ paddingBlock: "1.5rem 1rem" }}>
         <h2 id="ops-title" className="eyebrow is-centered">
           La sala de operaciones
         </h2>
-        <Tilt max={2.5} className="ops-tilt">
+        <Tilt max={2} className="ops-tilt">
           <OpsCenter />
         </Tilt>
       </section>
@@ -81,11 +81,11 @@ export default function Landing() {
             </div>
             <div>
               <dt>Tests automatizados</dt>
-              <dd>53</dd>
+              <dd>243</dd>
             </div>
             <div>
-              <dt>Tiempo de reporte</dt>
-              <dd>&lt;10 s</dd>
+              <dt>Análisis con IA local</dt>
+              <dd>~7 s</dd>
             </div>
           </dl>
         </Reveal>

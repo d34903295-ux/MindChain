@@ -1,365 +1,579 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AgentPixel } from "./AgentPixel";
+import { AgentStation, ScoreDial, Sparkline, type StationData } from "./AgentStation";
+import { IntelligenceCore } from "./IntelligenceCore";
 
-type Tx = { hash: string; from: string; to: string | null; value_eth: number; score: number; flags: string[]; alert: boolean };
-type Feed = { latest: number; n_txs: number; n_alerts: number; txs: Tx[] };
+/**
+ * Sala de operaciones de ChainMind.
+ *
+ * Idea: no es una ilustración de una oficina, es el estado real del sistema.
+ * Si el centinela está caído, aquí se ve caído. Si no hay alertas, se ve que no
+ * hay alertas. Todo lo que se mueve se mueve porque hay algo detrás.
+ *
+ * Distribución: núcleo de grafo al centro, una estación por agente alrededor,
+ * rieles de métricas a los lados y una banda de eventos abajo. La densidad es
+ * alta a propósito (es una sala de control, no una landing), pero el aire se
+ * conserva con jerarquía tipográfica y sombras suaves en vez de cajas duras.
+ */
 
-/* Geometría de la sala (viewBox 0 0 1200 820). Todo cabe: sin desbordes. */
-const FLOOR = { cx: 600, cy: 470, hw: 520, hh: 250 };
-const WALL_H = 150;
-
-type Station = {
-  id: string;
-  name: string;
-  metric: (f: Feed | null) => string;
-  x: number;
-  y: number;
-  alert?: boolean;
-  labelBelow?: boolean;
+type Tx = {
+  hash: string;
+  from: string;
+  to: string | null;
+  value_eth: number;
+  score: number;
+  flags: string[];
+  alert: boolean;
+  block?: number;
 };
 
-const STATIONS: Station[] = [
-  { id: "research", name: "Research Agent", x: 600, y: 356, metric: () => "contexto y OSINT" },
-  { id: "wallet", name: "Wallet Agent", x: 320, y: 380, metric: f => (f ? `${f.n_txs} txs en bloque` : "perfilando wallets") },
-  { id: "contract", name: "Contract Agent", x: 880, y: 380, metric: () => "bytecode y permisos" },
-  { id: "transaction", name: "Transaction Agent", x: 205, y: 520, metric: f => (f ? `${f.txs.length} movimientos` : "rastreando") },
-  { id: "monitoring", name: "Monitoring Agent", x: 995, y: 520, alert: true, metric: f => (f ? `${f.n_alerts} alertas` : "vigilando") },
-  { id: "risk", name: "Risk Agent", x: 455, y: 600, labelBelow: true, metric: f => (f ? `top score ${f.txs[0]?.score ?? 0}` : "puntaje") },
-  { id: "explanation", name: "Explanation Agent", x: 745, y: 600, labelBelow: true, metric: () => "redactando reporte" },
-];
+type Feed = {
+  chain: string;
+  latest: number;
+  n_txs: number;
+  n_alerts: number;
+  txs: Tx[];
+  median_eth?: number | null;
+  mad_eth?: number | null;
+  baseline_samples?: number;
+};
 
-function useRoomClock() {
-  const [state, setState] = useState<{ time: string; started: number | null }>({
-    time: "--:--:--",
-    started: null,
-  });
+type Status = {
+  ok?: boolean;
+  guard?: { in_flight?: Record<string, number>; max_concurrency?: number };
+  ia?: {
+    provider?: string;
+    model?: string;
+    local?: boolean;
+    estadisticas?: { calls?: number; ok?: number; errors?: number; rejected?: number; cached?: number; usd?: number };
+  };
+  agentes?: { nombre: string; rol: string; modelo: string }[];
+  sentinel?: {
+    enabled?: boolean;
+    cycles?: number;
+    alerts_delivered?: number;
+    last_error?: string | null;
+    telegram_configured?: boolean;
+    last_block?: Record<string, number>;
+  };
+  watchlist?: { size?: number };
+  anomaly_job?: { exists?: boolean; n_wallets?: number; n_anomalies?: number; generated_at?: string };
+};
+
+const AGENTE_COLOR: Record<string, string> = {
+  wallet: "#1d4ed8",
+  transaction: "#b45309",
+  contract: "#7c3aed",
+  research: "#0891b2",
+  monitoring: "#dc2626",
+  risk: "#db2777",
+  explanation: "#0d9488",
+};
+
+const short = (h: string, n = 6) => (h.length > n + 2 ? `${h.slice(0, n)}…${h.slice(-4)}` : h);
+
+function iso(seg: number) {
+  const d = Math.floor(seg / 60);
+  const s = seg % 60;
+  if (d < 60) return `${d}m ${String(s).padStart(2, "0")}s`;
+  return `${Math.floor(d / 60)}h ${d % 60}m`;
+}
+
+export function OpsCenter() {
+  const [feed, setFeed] = useState<Feed | null>(null);
+  const [status, setStatus] = useState<Status | null>(null);
+  const [cadena, setCadena] = useState<"ethereum" | "base">("ethereum");
+  const [reloj, setReloj] = useState("--:--:--");
+  const [eventos, setEventos] = useState<{ t: string; txt: string; tipo: "ok" | "alerta" | "info" }[]>([]);
+  const [historial, setHistorial] = useState<number[]>(() => Array(28).fill(0));
+  const [acumulado, setAcumulado] = useState({ wallets: 0, alertas: 0, tx: 0, bloques: 0 });
+  const suave = useReducedMotion();
+  const arranque = useRef(Date.now());
+  const vistos = useRef<Set<string>>(new Set());
+  const walletsVistas = useRef<Set<string>>(new Set());
+
+  // reloj de sala
   useEffect(() => {
-    const started = Date.now();
+    const p = (n: number) => String(n).padStart(2, "0");
     const tick = () => {
       const d = new Date();
-      const p = (n: number) => String(n).padStart(2, "0");
-      setState({ time: `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`, started });
+      setReloj(`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`);
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
-  return state;
-}
 
-function floorPath(): string {
-  const { cx, cy, hw, hh } = FLOOR;
-  return `M${cx} ${cy - hh} L${cx + hw} ${cy} L${cx} ${cy + hh} L${cx - hw} ${cy} Z`;
-}
-
-function GridLines() {
-  const { cx, cy, hw, hh } = FLOOR;
-  const lines: JSX.Element[] = [];
-  const N = 12;
-  for (let i = 1; i < N; i++) {
-    const t = i / N;
-    // paralelas al eje izquierda-derecha
-    const ax = cx - hw + t * hw * 2;
-    const ayTop = cy - hh + t * hh * 2;
-    const ayBot = cy + hh - t * hh * 2;
-    lines.push(
-      <line key={`h${i}`} x1={ax} y1={ayTop} x2={ax} y2={ayBot} className="ops-grid" />,
-      <line key={`v${i}`} x1={cx - hw + t * hw * 2} y1={cy} x2={cx} y2={cy - hh + t * hh * 2} className="ops-grid" />,
-      <line
-        key={`v2${i}`}
-        x1={cx - hw + t * hw * 2}
-        y1={cy}
-        x2={cx}
-        y2={cy + hh - t * hh * 2}
-        className="ops-grid"
-      />
-    );
-  }
-  return <g aria-hidden="true">{lines}</g>;
-}
-
-function Screen({ x, y, alert, seed }: { x: number; y: number; alert?: boolean; seed: number }) {
-  const bars = [
-    { w: 30, d: 2.6 },
-    { w: 22, d: 3.1 },
-    { w: 26, d: 2.2 },
-  ];
-  return (
-    <g transform={`translate(${x},${y})`} aria-hidden="true">
-      <rect x={-28} y={-24} width={56} height={42} rx={5} className="ops-screen" />
-      <rect x={-22} y={-18} width={20} height={3} rx={1.5} fill={alert ? "#dc2626" : "#6f9bff"} />
-      <rect x={-22} y={-11} width={12} height={3} rx={1.5} fill="#334155" />
-      {bars.map((b, i) => (
-        <rect key={i} x={-22} y={-3 + i * 7} height={3.5} rx={1.75} fill={alert && i === 0 ? "#dc2626" : "#2563eb"}>
-          <animate
-            attributeName="width"
-            values={`${b.w * 0.25};${b.w + 8};${b.w * 0.25}`}
-            dur={`${b.d + seed * 0.01}s`}
-            repeatCount="indefinite"
-          />
-        </rect>
-      ))}
-    </g>
-  );
-}
-
-function StationView({ s, feed }: { s: Station; feed: Feed | null }) {
-  const isAlert = Boolean(s.alert && feed && feed.n_alerts > 0);
-  return (
-    <g className="ops-station" transform={`translate(${s.x},${s.y})`}>
-      <title>{`${s.name} — ${s.metric(feed)}`}</title>
-      {/* escritorio isométrico */}
-      <polygon points="-58,0 0,-29 58,0 0,29" className="ops-desk-top" />
-      <polygon points="-58,0 0,29 0,56 -58,27" className="ops-desk-left" />
-      <polygon points="0,29 58,0 58,27 0,56" className="ops-desk-right" />
-      {/* pantallas con pie anclado al escritorio */}
-      <Screen x={-34} y={-70} alert={isAlert} seed={s.x} />
-      <Screen x={34} y={-70} alert={false} seed={s.x + 3} />
-      <line x1={-34} y1={-46} x2={-34} y2={-22} className="ops-stand" />
-      <line x1={34} y1={-46} x2={34} y2={-22} className="ops-stand" />
-      <line x1={-46} y1={-22} x2={46} y2={-22} className="ops-stand" />
-      {/* avatar del agente */}
-      <g transform="translate(0,-112)">
-        <circle r={13} className="ops-avatar" />
-        <circle r={4.5} fill={isAlert ? "#dc2626" : "#2563eb"} className="ops-avatar-core">
-          {isAlert && (
-            <animate attributeName="r" values="4.5;7;4.5" dur="1.6s" repeatCount="indefinite" />
-          )}
-        </circle>
-        <path d="M-10 15 L-10 8 Q-10 3 0 3 Q10 3 10 8 L10 15 Z" className="ops-avatar-body" />
-      </g>
-      {/* etiqueta */}
-      <g transform={`translate(0,${s.labelBelow ? 62 : -152})`}>
-        <rect x={-66} y={-15} width={132} height={30} rx={9} className="ops-label-bg" />
-        <text className="ops-label-name" textAnchor="middle" y={-2}>
-          {s.name}
-        </text>
-        <text className="ops-label-metric" textAnchor="middle" y={10}>
-          {s.metric(feed)}
-        </text>
-      </g>
-      {s.labelBelow && <line x1={0} y1={30} x2={0} y2={47} className="ops-stand" />}
-    </g>
-  );
-}
-
-function Table({ feed }: { feed: Feed | null }) {
-  const { cx, cy } = FLOOR;
-  const nodes = [
-    { x: 0, y: -6, r: 13, c: "#2563eb", core: true },
-    { x: -104, y: -44, r: 7, c: "#16a34a" },
-    { x: 8, y: -68, r: 7, c: "#16a34a" },
-    { x: 116, y: -32, r: 7, c: "#b45309" },
-    { x: -46, y: 46, r: 7, c: "#16a34a" },
-    { x: 84, y: 44, r: 7, c: "#16a34a" },
-    { x: -142, y: 16, r: 6, c: "#b45309" },
-    { x: 156, y: 18, r: 6, c: "#b45309" },
-  ];
-  const edges: [number, number][] = [
-    [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 7], [3, 7], [4, 5],
-  ];
-  return (
-    <g transform={`translate(${cx},${cy})`}>
-      <title>Grafo de relaciones entre wallets y contratos</title>
-      <polygon points="-190,0 0,-95 190,0 0,95" className="ops-table-top" />
-      <polygon points="-190,0 0,95 0,124 -190,29" className="ops-table-left" />
-      <polygon points="0,95 190,0 190,29 0,124" className="ops-table-right" />
-      <g className="ops-table-grid" aria-hidden="true">
-        {[-120, -60, 0, 60, 120].map(dx => (
-          <line key={dx} x1={dx - 47} y1={-24} x2={dx + 47} y2={24} />
-        ))}
-        {[-60, 0, 60].map(dy => (
-          <line key={dy} x1={-95} y1={dy + 47} x2={95} y2={dy - 47} />
-        ))}
-      </g>
-      {edges.map(([a, b], i) => (
-        <line key={i} x1={nodes[a].x} y1={nodes[a].y} x2={nodes[b].x} y2={nodes[b].y} className="ops-edge">
-          <animate
-            attributeName="stroke"
-            values="#cbd5e1;#2563eb;#cbd5e1"
-            dur={`${3.6 + i * 0.35}s`}
-            repeatCount="indefinite"
-          />
-        </line>
-      ))}
-      {edges.slice(0, 6).map(([a, b], i) => {
-        const t = feed?.txs[i];
-        return (
-          <circle key={`f${i}`} r={3.2} fill={t?.alert ? "#dc2626" : "#2563eb"}>
-            <animateMotion
-              dur={`${2.8 + i * 0.3}s`}
-              repeatCount="indefinite"
-              path={`M${nodes[a].x},${nodes[a].y} L${nodes[b].x},${nodes[b].y}`}
-            />
-            <animate attributeName="opacity" values="0;1;0" dur={`${2.8 + i * 0.3}s`} repeatCount="indefinite" />
-          </circle>
-        );
-      })}
-      {nodes.map((n, i) =>
-        n.core ? null : (
-          <circle key={i} cx={n.x} cy={n.y} r={n.r} fill={n.c}>
-            <animateTransform
-              attributeName="transform"
-              type="translate"
-              values={`0 0; ${i % 2 ? 5 : -5} ${i % 3 ? -4 : 4}; 0 0`}
-              dur={`${3 + i * 0.3}s`}
-              repeatCount="indefinite"
-            />
-          </circle>
-        )
-      )}
-      <g>
-        <circle cx={0} cy={-6} r={18} fill="#2563eb" />
-        <path d="M0 -17 L9 4 L-9 4 Z" fill="#fff" />
-        <circle cx={0} cy={-6} r={32} fill="none" stroke="#2563eb" strokeOpacity={0.25}>
-          <animate attributeName="r" values="24;40;24" dur="5s" repeatCount="indefinite" />
-          <animate attributeName="stroke-opacity" values="0.35;0.05;0.35" dur="5s" repeatCount="indefinite" />
-        </circle>
-      </g>
-      <g className="ops-legend" transform="translate(-150, 80)">
-        <rect x={-12} y={-11} width={152} height={19} rx={6} className="ops-legend-bg" />
-        <circle cx={0} cy={-1.5} r={3.5} fill="#2563eb" />
-        <text x={7} y={2}>core</text>
-        <circle cx={44} cy={-1.5} r={3.5} fill="#16a34a" />
-        <text x={51} y={2}>wallet</text>
-        <circle cx={94} cy={-1.5} r={3.5} fill="#b45309" />
-        <text x={101} y={2}>contrato</text>
-      </g>
-    </g>
-  );
-}
-
-function Mural({ feed }: { feed: Feed | null }) {
-  const txs = (feed?.txs ?? []).slice(0, 4);
-  return (
-    <g transform="translate(600,62)">
-      <title>Actividad en cadena en tiempo real</title>
-      <rect x={-300} y={0} width={600} height={104} rx={12} className="ops-mural" />
-      <text x={-282} y={20} className="ops-mural-title">
-        Actividad en cadena
-        <tspan className="ops-mural-block">{feed ? ` · bloque ${feed.latest}` : " · conectando"}</tspan>
-      </text>
-      <circle cx={278} cy={15} r={4} className="ops-live-dot" />
-      {txs.length === 0 && (
-        <text x={-282} y={48} className="ops-mural-txt">
-          esperando transacciones…
-        </text>
-      )}
-      {txs.map((t, i) => (
-        <g key={t.hash} transform={`translate(0, ${32 + i * 17})`} className="ops-mural-row">
-          <rect x={-290} y={-9} width={580} height={16} rx={5} className={t.alert ? "ops-mural-line is-alert" : "ops-mural-line"} />
-          <text x={-278} y={3} className={t.alert ? "ops-mural-score is-alert" : "ops-mural-score"}>
-            {t.score}
-          </text>
-          <text x={-232} y={3} className="ops-mural-txt">
-            {t.value_eth} ETH · {t.flags[0] ?? "transferencia"}
-          </text>
-          <text x={272} y={3} className="ops-mural-hash" textAnchor="end">
-            {t.hash.slice(0, 8)}…
-          </text>
-        </g>
-      ))}
-    </g>
-  );
-}
-
-export function OpsCenter() {
-  const [feed, setFeed] = useState<Feed | null>(null);
-  const { time, started } = useRoomClock();
-
+  // feed: 6 s. Con el guard de concurrencia y su dedupe, no satura la API.
   useEffect(() => {
-    let alive = true;
-    const tick = () => {
-      fetch("http://localhost:8000/feed/ethereum?max_blocks=1")
+    let vivo = true;
+    const pedir = () => {
+      fetch(`http://localhost:8000/feed/${cadena}?max_blocks=1`)
         .then(r => (r.ok ? r.json() : Promise.reject()))
         .then((j: Feed) => {
-          if (alive) setFeed(j);
+          if (!vivo) return;
+          setFeed(j);
+          setHistorial(h => [...h.slice(1), j.n_txs]);
+          // contadores honestos: wallets y alertas se cuentan de lo que ha
+          // pasado por la sesión, no se inventan para llenar la casilla
+          const nuevos = new Set(walletsVistas.current);
+          let nuevosWallets = 0;
+          for (const t of j.txs ?? []) {
+            for (const a of [t.from, t.to]) {
+              if (a && !nuevos.has(a)) {
+                nuevos.add(a);
+                nuevosWallets += 1;
+              }
+            }
+          }
+          walletsVistas.current = nuevos;
+          setAcumulado(a => ({
+            ...a,
+            tx: a.tx + (j.n_txs || 0),
+            alertas: a.alertas + (j.n_alerts || 0),
+            bloques: a.bloques + 1,
+            wallets: a.wallets + nuevosWallets,
+          }));
         })
         .catch(() => undefined);
     };
-    tick();
-    const id = setInterval(tick, 12000);
+    pedir();
+    const id = setInterval(pedir, 6000);
     return () => {
-      alive = false;
+      vivo = false;
+      clearInterval(id);
+    };
+  }, [cadena]);
+
+  // estado del sistema: 9 s
+  useEffect(() => {
+    let vivo = true;
+    const pedir = () => {
+      fetch("http://localhost:8000/status")
+        .then(r => (r.ok ? r.json() : Promise.reject()))
+        .then((j: Status) => vivo && setStatus(j))
+        .catch(() => undefined);
+    };
+    pedir();
+    const id = setInterval(pedir, 9000);
+    return () => {
+      vivo = false;
       clearInterval(id);
     };
   }, []);
 
-  const mins = started === null ? null : Math.floor((Date.now() - started) / 60000);
+  // banda de eventos: lo que acaba de ocurrir, no un log estático
+  useEffect(() => {
+    if (!feed) return;
+    const nuevos: typeof eventos = [];
+    for (const t of feed.txs.slice(0, 4)) {
+      if (vistos.current.has(t.hash)) continue;
+      vistos.current.add(t.hash);
+      if (vistos.current.size > 120) vistos.current = new Set([t.hash]);
+      nuevos.push({
+        t: reloj,
+        txt: t.alert
+          ? `Alerta ${short(t.hash)} · ${t.value_eth} ETH · score ${t.score}`
+          : `${short(t.hash)} · ${t.value_eth} ETH · ${t.flags[0] ?? "transferencia"}`,
+        tipo: t.alert ? "alerta" : "info",
+      });
+    }
+    if (feed.n_alerts > 0 && feed.txs[0] && vistos.current.size % 7 === 0) {
+      nuevos.push({ t: reloj, txt: `Feed ${cadena}: ${feed.n_alerts} alertas en el bloque ${feed.latest}`, tipo: "alerta" });
+    }
+    if (nuevos.length) setEventos(e => [...nuevos.reverse(), ...e].slice(0, 14));
+  }, [feed, reloj, cadena]);
+
+  const ia = status?.ia;
+  const sen = status?.sentinel;
+  const riesgo = useMemo(() => (feed?.txs ?? []).reduce((m, t) => Math.max(m, t.score), 0) || null, [feed]);
+  const uptime = Math.floor((Date.now() - arranque.current) / 1000);
+
+  // Cada estación se construye con datos reales; si no hay, su texto lo dice.
+  const estaciones: Record<string, StationData> = {
+    wallet: {
+      titulo: "Wallet Agent",
+      estado: feed ? `perfilando · bloque ${feed.latest}` : "esperando feed",
+      progreso: feed ? Math.min(1, 0.3 + (feed.n_txs || 0) / 90) : null,
+      metricas: [
+        ["dirs vistas", String(acumulado.wallets)],
+        ["bloques", String(acumulado.bloques)],
+        ["score top", riesgo === null ? "n/d" : String(riesgo)],
+      ],
+      lineas: feed?.txs.slice(0, 2).map(t => `${short(t.from, 8)} → ${short(t.to || "contrato nuevo", 8)}`) ?? [],
+    },
+    transaction: {
+      titulo: "Transaction Agent",
+      estado: feed ? "leyendo movimientos" : "sin movimientos",
+      progreso: feed ? Math.min(1, 0.25 + (feed.n_txs || 0) / 70) : null,
+      metricas: [
+        ["en bloque", String(feed?.n_txs ?? 0)],
+        ["mediana", feed?.median_eth != null ? `${feed.median_eth}` : "n/d"],
+        ["total", String(acumulado.tx)],
+      ],
+      lineas: (feed?.txs ?? []).slice(0, 2).map(t => `${t.value_eth} ETH · ${t.flags[0] ?? "sin señal"}`),
+    },
+    contract: {
+      titulo: "Contract Agent",
+      estado: "bytecode y permisos",
+      // sin telemetría propia del agente: barra indeterminada, no un % inventado
+      progreso: null,
+      metricas: [
+        ["fuente", "sourcify"],
+        ["slither", "opcional"],
+        ["wl", String(status?.watchlist?.size ?? 0)],
+      ],
+      lineas: ["esperando una dirección de contrato", "bytecode y permisos al llegar una"],
+    },
+    research: {
+      titulo: "Research Agent",
+      estado: "contexto y screening",
+      progreso: null,
+      metricas: [
+        ["vigiladas", String(status?.watchlist?.size ?? 0)],
+        ["job ML", String(status?.anomaly_job?.n_anomalies ?? "—")],
+        ["agentes", String(status?.agentes?.length ?? 7)],
+      ],
+      lineas: [
+        "señales de screening: interacción > título",
+        `job nocturno: ${status?.anomaly_job?.n_wallets ?? 0} wallets analizadas`,
+      ],
+    },
+    monitoring: {
+      titulo: "Monitoring Agent",
+      estado: sen?.enabled ? `centinela · ${sen.cycles ?? 0} ciclos` : "centinela apagado",
+      progreso: sen?.enabled ? Math.min(1, 0.5 + (sen.cycles ?? 0) / 40) : 0.15,
+      alerta: (feed?.n_alerts ?? 0) > 0,
+      metricas: [
+        ["eventos", String(acumulado.tx)],
+        ["alertas", String(sen?.alerts_delivered ?? 0)],
+        ["tg", sen?.telegram_configured ? "on" : "off"],
+      ],
+      lineas: [
+        ...(feed?.n_alerts ? [`${feed.n_alerts} señales en el bloque ${feed.latest}`] : ["sin señales en este bloque"]),
+        sen?.last_error ? `error: ${sen.last_error.slice(0, 40)}` : "baseline de la red estable",
+      ],
+    },
+    risk: {
+      titulo: "Risk Agent",
+      estado: "puntaje heurístico",
+      progreso: riesgo === null ? null : Math.min(1, 0.2 + riesgo / 120),
+      alerta: riesgo !== null && riesgo >= 70,
+      metricas: [
+        ["score", riesgo === null ? "n/d" : `${riesgo}/100`],
+        ["nivel", riesgo === null ? "n/d" : riesgo >= 70 ? "alto" : riesgo >= 30 ? "medio" : "bajo"],
+        ["wl", String(status?.watchlist?.size ?? 0)],
+      ],
+      lineas: [`mediana de red ${feed?.median_eth ?? "n/d"} ETH`, `MAD ${feed?.mad_eth ?? "n/d"}`],
+    },
+    explanation: {
+      titulo: "Explanation Agent",
+      estado: ia?.provider ? `redactando con ${ia.model}` : "texto determinista",
+      progreso: ia?.estadisticas ? Math.min(1, 0.3 + (ia.estadisticas.ok ?? 0) / 25) : null,
+      metricas: [
+        ["hechos", String(ia?.estadisticas?.ok ?? 0)],
+        ["vetados", String(ia?.estadisticas?.rejected ?? 0)],
+        ["coste", `$${(ia?.estadisticas?.usd ?? 0).toFixed(3)}`],
+      ],
+      lineas: ia?.local
+        ? ["IA local: ningún dato sale de la máquina", `caché: ${ia?.estadisticas?.cached ?? 0} respuestas`]
+        : ["sin proveedor: se usa texto determinista", "configura ANTHROPIC_API_KEY para narrar"],
+    },
+  };
+
+  const orden = ["wallet", "transaction", "contract", "research", "monitoring", "risk", "explanation"] as const;
 
   return (
-    <div className="ops">
-      <svg
-        className="ops-svg"
-        viewBox="0 0 1200 820"
-        role="img"
-        aria-label="Sala de operaciones de ChainMind: siete agentes de IA trabajan en una oficina isométrica y vigilan Ethereum en tiempo real"
-      >
-        <defs>
-          <linearGradient id="opsFloor" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ffffff" />
-            <stop offset="100%" stopColor="#eef2f7" />
-          </linearGradient>
-          <linearGradient id="opsWall" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#fbfcfe" />
-            <stop offset="100%" stopColor="#e7ecf2" />
-          </linearGradient>
-        </defs>
+    <div className="ops2">
+      {/* ---------- cabecera ---------- */}
+      <header className="ops2-head">
+        <div className="ops2-head-l">
+          <span className={status?.ok ? "pill is-ok" : "pill"}>
+            <span className="pill-dot" aria-hidden="true" />
+            {status?.ok ? "Sistema online" : "conectando"}
+          </span>
+          <span className="pill">
+            {status?.agentes?.length ?? 7} agentes activos
+          </span>
+          <span className="pill">
+            {ia?.provider ? `IA ${ia.provider}${ia.model ? ` · ${ia.model}` : ""}` : "IA no configurada"}
+          </span>
+        </div>
+        <div className="ops2-head-r">
+          <div className="chain-toggle" role="group" aria-label="Red vigilada">
+            {(["ethereum", "base"] as const).map(c => (
+              <button
+                key={c}
+                type="button"
+                className={cadena === c ? "is-on" : ""}
+                onClick={() => setCadena(c)}
+                aria-pressed={cadena === c}
+              >
+                {c === "ethereum" ? "Ethereum" : "Base"}
+              </button>
+            ))}
+          </div>
+          <span className="ops2-clock mono">{reloj}</span>
+          <span className={sen?.enabled ? "pill-dot is-live" : "pill-dot"} aria-label="centinela" />
+        </div>
+      </header>
 
-        {/* suelo */}
-        <path d={floorPath()} fill="url(#opsFloor)" stroke="#dbe2ea" strokeWidth={1.5} />
-        <g clipPath="url(#opsFloorClip)">
-          <clipPath id="opsFloorClip">
-            <path d={floorPath()} />
-          </clipPath>
-          <GridLines />
-        </g>
+      <div className="ops2-grid">
+        {/* ---------- riel izquierdo ---------- */}
+        <aside className="rail rail-l" aria-label="Actividad del sistema">
+          <Panel titulo="Actividad en tiempo real" badge={feed ? `bloque ${feed.latest}` : "conectando"}>
+            <div className="kpi-grid">
+              <Kpi etiqueta="Transacciones" valor={String(feed?.n_txs ?? 0)} delta={`${historial[historial.length - 1] ?? 0} en bloque`} />
+              <Kpi etiqueta="Alertas" valor={String(feed?.n_alerts ?? 0)} alerta={(feed?.n_alerts ?? 0) > 0} delta="heurística" />
+              <Kpi etiqueta="Direcciones vistas" valor={String(acumulado.wallets)} delta={`${acumulado.bloques} bloques`} />
+              <Kpi etiqueta="IA · llamadas" valor={String(ia?.estadisticas?.calls ?? 0)} delta={`${ia?.estadisticas?.rejected ?? 0} descartadas`} />
+            </div>
+            <Sparkline valores={historial} color={AGENTE_COLOR.wallet} alto={40} />
+          </Panel>
 
-        {/* paredes */}
-        <polygon
-          points={`${FLOOR.cx - FLOOR.hw},${FLOOR.cy} ${FLOOR.cx},${FLOOR.cy - FLOOR.hh} ${FLOOR.cx},${FLOOR.cy - FLOOR.hh - WALL_H} ${FLOOR.cx - FLOOR.hw},${FLOOR.cy - WALL_H}`}
-          fill="url(#opsWall)"
-          stroke="#e2e8f0"
-          strokeWidth={1.5}
-        />
-        <polygon
-          points={`${FLOOR.cx},${FLOOR.cy - FLOOR.hh} ${FLOOR.cx + FLOOR.hw},${FLOOR.cy} ${FLOOR.cx + FLOOR.hw},${FLOOR.cy - WALL_H} ${FLOOR.cx},${FLOOR.cy - FLOOR.hh - WALL_H}`}
-          fill="#f2f5f9"
-          stroke="#e2e8f0"
-          strokeWidth={1.5}
-        />
-        <g aria-hidden="true">
-          <rect x={1056} y={396} width={54} height={104} rx={8} className="ops-door" />
-          <text x={1083} y={438} className="ops-door-text" textAnchor="middle">
-            OPS
-          </text>
-          <text x={1083} y={456} className="ops-door-text" textAnchor="middle">
-            24/7
-          </text>
-        </g>
+          <Panel titulo="Redes vigiladas">
+            <ul className="net-list">
+              {(["ethereum", "base"] as const).map(c => {
+                const bloq = sen?.last_block?.[c];
+                return (
+                  <li key={c}>
+                    <span className="net-name">
+                      <span className={cadena === c ? "net-dot is-on" : "net-dot"} aria-hidden="true" />
+                      {c === "ethereum" ? "Ethereum" : "Base"}
+                    </span>
+                    <span className="net-block mono">{bloq ? `#${bloq.toLocaleString("es")}` : "—"}</span>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="net-foot">
+              <span>guard {status?.guard?.max_concurrency ?? 2} slots</span>
+              <span>dedupe {status?.guard?.in_flight?.["feed:ethereum"] ?? 0} en vuelo</span>
+            </div>
+          </Panel>
 
-        <Mural feed={feed} />
-        <Table feed={feed} />
-        {STATIONS.map(s => (
-          <StationView key={s.id} s={s} feed={feed} />
-        ))}
+          <Panel titulo="Alertas recientes" alerta={(feed?.n_alerts ?? 0) > 0}>
+            {(feed?.txs ?? []).filter(t => t.alert).length === 0 && feed?.n_alerts === 0 ? (
+              <p className="empty">Sin alertas. El baseline de la red está estable.</p>
+            ) : (
+              <ul className="alert-list">
+                {(feed?.txs ?? []).slice(0, 3).map(t => (
+                  <li key={t.hash}>
+                    <span className="alert-dot" aria-hidden="true" />
+                    <span className="alert-txt">
+                      {t.value_eth} ETH
+                      <small className="mono"> {short(t.hash)}</small>
+                    </span>
+                    <span className="alert-score mono">{t.score}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
 
-        {/* barra frontal */}
-        <g transform="translate(600,766)">
-          <rect x={-540} y={-30} width={1080} height={60} rx={14} className="ops-bar" />
-          <circle cx={-508} cy={0} r={5} className="ops-bar-dot" />
-          <text x={-492} y={4} className="ops-bar-text">
-            7 agentes activos
-          </text>
-          <text x={0} y={5} className="ops-bar-brand" textAnchor="middle">
-            ChainMind
-          </text>
-          <text x={508} y={4} className="ops-bar-text" textAnchor="end">
-            {time} · {mins === null ? "sesión activa" : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h`}
-          </text>
-        </g>
-      </svg>
+          <Panel titulo="Distribución de score" badge={cadena}>
+            {(() => {
+              const cubos = [0, 0, 0, 0, 0];
+              for (const t of feed?.txs ?? []) cubos[Math.min(4, Math.floor(t.score / 20))] += 1;
+              const tope = Math.max(1, ...cubos);
+              const etiquetas = ["0-19", "20-39", "40-59", "60-79", "80+"];
+              return (
+                <ul className="dist-list">
+                  {cubos.map((c, i) => (
+                    <li key={etiquetas[i]}>
+                      <span className="dist-label mono">{etiquetas[i]}</span>
+                      <span className="dist-bar">
+                        <motion.span
+                          className={i >= 3 ? "fill is-hot" : i === 2 ? "fill is-warm" : "fill"}
+                          animate={{ width: `${(c / tope) * 100}%` }}
+                          transition={{ duration: 0.6, ease: "easeOut" }}
+                        />
+                      </span>
+                      <span className="dist-n mono">{c}</span>
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
+          </Panel>
+
+          <Panel titulo="Direcciones por valor" badge="top 5">
+            {(feed?.txs ?? []).length === 0 ? (
+              <p className="empty">Sin movimientos en este bloque.</p>
+            ) : (
+              <ul className="top-list">
+                {[...(feed?.txs ?? [])]
+                  .sort((a, b) => b.value_eth - a.value_eth)
+                  .slice(0, 5)
+                  .map(t => (
+                    <li key={t.hash}>
+                      <span className="top-addr mono">{short(t.from, 7)}</span>
+                      <span className="top-bar" aria-hidden="true">
+                        <span style={{ width: `${Math.min(100, (t.value_eth / Math.max(1, riesgo ?? 100)) * 100)}%` }} />
+                      </span>
+                      <span className="top-val mono">{t.value_eth}</span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </Panel>
+        </aside>
+
+        {/* ---------- centro: núcleo rodeado por los 7 agentes (rejilla 3x3) ---------- */}
+        <main className="ops2-center">
+          <div className="ops2-stage">
+            <div className="stage-slot s-research"><AgentStation id="research" color={AGENTE_COLOR.research} data={estaciones.research} /></div>
+            <div className="stage-slot s-wallet"><AgentStation id="wallet" color={AGENTE_COLOR.wallet} data={estaciones.wallet} /></div>
+            <div className="stage-slot s-contract"><AgentStation id="contract" color={AGENTE_COLOR.contract} data={estaciones.contract} /></div>
+
+            <div className="stage-slot s-core">
+              <div className="core-wrap">
+                <div className="core-halo" aria-hidden="true" />
+                <IntelligenceCore txs={feed?.txs ?? []} cadena={cadena} ancho={560} alto={560} />
+                <div className="core-foot">
+                  <ul className="core-legend">
+                    <li><span className="cl cl-wallet" /> wallets</li>
+                    <li><span className="cl cl-ctr" /> contratos</li>
+                    <li><span className="cl cl-net" /> red</li>
+                    <li><span className="cl cl-alert" /> alerta</li>
+                  </ul>
+                  <p className="core-caption">
+                    <strong className="mono">#{feed?.latest?.toLocaleString("es") ?? "—"}</strong>
+                    <span>{cadena}</span>
+                    <span className="core-live"><span aria-hidden="true" /> en vivo</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="stage-slot s-risk"><AgentStation id="risk" color={AGENTE_COLOR.risk} data={estaciones.risk} /></div>
+            <div className="stage-slot s-monitoring"><AgentStation id="monitoring" color={AGENTE_COLOR.monitoring} data={estaciones.monitoring} /></div>
+            <div className="stage-slot s-transaction"><AgentStation id="transaction" color={AGENTE_COLOR.transaction} data={estaciones.transaction} /></div>
+            <div className="stage-slot s-explanation"><AgentStation id="explanation" color={AGENTE_COLOR.explanation} data={estaciones.explanation} /></div>
+          </div>
+        </main>
+
+        {/* ---------- riel derecho ---------- */}
+        <aside className="rail rail-r" aria-label="Estado y eventos">
+          <Panel titulo="Flujo de transacciones" badge="en vivo">
+            <ul className="flow-list">
+              {(feed?.txs ?? []).slice(0, 5).map(t => (
+                <li key={t.hash}>
+                  <span className="flow-hash mono">{short(t.hash, 8)}</span>
+                  <span className={t.value_eth >= 0 ? "flow-val" : "flow-val is-neg"}>
+                    {t.value_eth >= 0 ? "+" : ""}
+                    {t.value_eth} ETH
+                  </span>
+                  <span className="flow-score mono">score {t.score}</span>
+                </li>
+              ))}
+              {feed?.txs?.length === 0 && <li className="empty">Esperando el primer bloque…</li>}
+            </ul>
+            <div className="flow-stats">
+              <span>mediana {feed?.median_eth ?? "n/d"} ETH</span>
+              <span>MAD {feed?.mad_eth ?? "n/d"}</span>
+              <span>muestra {feed?.baseline_samples ?? 0}</span>
+            </div>
+          </Panel>
+
+          <Panel titulo="Score máximo del bloque" alerta={riesgo !== null && riesgo >= 70}>
+            <div className="score-row">
+              <ScoreDial valor={riesgo} alerta={riesgo !== null && riesgo >= 70} />
+              <ul className="score-legend">
+                <li><span className="lg lg-ok" /> bajo &lt; 30</li>
+                <li><span className="lg lg-warn" /> medio 30-69</li>
+                <li><span className="lg lg-bad" /> alto ≥ 70</li>
+              </ul>
+            </div>
+          </Panel>
+
+          <Panel titulo="Nodo de IA" alerta={Boolean(ia?.estadisticas?.errors)}>
+            <div className="ia-grid">
+              <div><dt>proveedor</dt><dd>{ia?.provider ?? "—"}</dd></div>
+              <div><dt>modelo</dt><dd className="mono">{ia?.model ?? "—"}</dd></div>
+              <div><dt>éxito</dt><dd>{ia?.estadisticas?.ok ?? 0}</dd></div>
+              <div><dt>rechazadas</dt><dd>{ia?.estadisticas?.rejected ?? 0}</dd></div>
+              <div><dt>coste</dt><dd>${(ia?.estadisticas?.usd ?? 0).toFixed(4)}</dd></div>
+              <div><dt>job ML</dt><dd>{status?.anomaly_job?.n_anomalies ?? "—"}</dd></div>
+            </div>
+          </Panel>
+
+          <Panel titulo="Eventos recientes">
+            <ul className="event-list">
+              <AnimatePresence initial={false}>
+                {eventos.map((e, i) => (
+                  <motion.li
+                    key={`${e.txt}-${i}`}
+                    initial={{ opacity: 0, x: 14 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className={e.tipo}
+                  >
+                    <span className="ev-t mono">{e.t}</span>
+                    <span className="ev-txt">{e.txt}</span>
+                  </motion.li>
+                ))}
+              </AnimatePresence>
+              {eventos.length === 0 && <li className="empty">Sin eventos todavía.</li>}
+            </ul>
+          </Panel>
+        </aside>
+      </div>
+
+      {/* ---------- banda inferior ---------- */}
+      <footer className="ops2-foot">
+        <span className={sen?.enabled ? "foot-live is-on" : "foot-live"}>
+          <span aria-hidden="true" /> Operación en curso
+        </span>
+        <span className="foot-agents">
+          {orden.map((id, i) => (
+            <span key={id} className="foot-agent" style={{ ["--c" as string]: AGENTE_COLOR[id] }} title={estaciones[id].titulo}>
+              <AgentPixel id={id} color={AGENTE_COLOR[id]} size={22} carga={estaciones[id].progreso ?? 0.35} alarmed={estaciones[id].alerta} />
+              <em>{i + 1}</em>
+            </span>
+          ))}
+        </span>
+        <span className="foot-meta mono">
+          {status?.agentes?.length ?? 7} agentes · 1 objetivo · uptime {iso(uptime)}
+          {sen?.telegram_configured ? " · telegram activo" : " · telegram sin configurar"}
+        </span>
+      </footer>
+    </div>
+  );
+}
+
+function Panel({
+  titulo,
+  children,
+  badge,
+  alerta,
+}: {
+  titulo: string;
+  children: React.ReactNode;
+  badge?: string;
+  alerta?: boolean;
+}) {
+  return (
+    <section className={alerta ? "panel is-alert" : "panel"}>
+      <header className="panel-head">
+        <h4>{titulo}</h4>
+        {badge && <span className="panel-badge mono">{badge}</span>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function Kpi({ etiqueta, valor, delta, alerta }: { etiqueta: string; valor: string; delta?: string; alerta?: boolean }) {
+  return (
+    <div className={alerta ? "kpi is-alert" : "kpi"}>
+      <span className="kpi-label">{etiqueta}</span>
+      <span className="kpi-value mono">{valor}</span>
+      {delta && <span className="kpi-delta">{delta}</span>}
     </div>
   );
 }
