@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentPixel } from "./AgentPixel";
 import { AgentStation, ScoreDial, Sparkline, type StationData } from "./AgentStation";
-import { IntelligenceCore } from "./IntelligenceCore";
+import { AgentFloor } from "./AgentFloor";
 
 /**
  * Sala de operaciones de ChainMind.
@@ -286,6 +286,15 @@ export function OpsCenter() {
 
   const orden = ["wallet", "transaction", "contract", "research", "monitoring", "risk", "explanation"] as const;
 
+  // lo que cada robot hace en la planta: su carga y su alarma son las mismas
+  // que ya mostraba cada estación, no un adorno nuevo
+  const cargas = Object.fromEntries(
+    orden.map(id => [id, estaciones[id].progreso ?? 0.4]),
+  ) as Record<string, number>;
+  const alarmas = Object.fromEntries(
+    orden.map(id => [id, estaciones[id].alerta === true]),
+  ) as Record<string, boolean>;
+
   return (
     <div className="ops2">
       {/* ---------- cabecera ---------- */}
@@ -432,7 +441,12 @@ export function OpsCenter() {
             <div className="stage-slot s-core">
               <div className="core-wrap">
                 <div className="core-halo" aria-hidden="true" />
-                <IntelligenceCore txs={feed?.txs ?? []} cadena={cadena} ancho={560} alto={560} />
+                <AgentFloor
+                  txs={feed?.txs ?? []}
+                  cadena={cadena}
+                  carga={cargas}
+                  alerta={alarmas}
+                />
                 <div className="core-foot">
                   <ul className="core-legend">
                     <li><span className="cl cl-wallet" /> wallets</li>

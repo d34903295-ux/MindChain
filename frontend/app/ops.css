@@ -215,11 +215,16 @@
 /* El SVG NO puede llevar height:100% dentro de un flex: su altura dependería
    de la caja que a su vez depende de él, y colapsaba a cero (el núcleo se
    quedaba en blanco). Con width:100% y height:auto manda el viewBox. */
-.core-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  flex: 0 1 auto;
+.core-svg { display: block; width: 100%; height: auto; flex: 0 1 auto; }
+
+/* ---------------- planta de la sala ---------------- */
+.floor-svg { display: block; width: 100%; height: auto; flex: 0 1 auto; }
+.floor-station-name {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  fill: #7c8798;
+  text-transform: uppercase;
 }
 .core-wrap {
   align-items: stretch;
