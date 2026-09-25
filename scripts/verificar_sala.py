@@ -10,7 +10,7 @@ BACK = "http://127.0.0.1:8000"
 WEB = "http://127.0.0.1:3000"
 
 
-def(pattern, text):
+def cuenta(pattern, text):
     return len(re.findall(pattern, text))
 
 
@@ -29,4 +29,4 @@ for etiqueta, patron in [
     ("barras", r"station-bar"),
     ("logs", r"station-log"),
 ]:
-    print(f"  {etiqueta:12} {function(patron, html)}")
+    print(f"  {etiqueta:12} {cuenta(patron, html)}")
