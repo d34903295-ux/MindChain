@@ -1,0 +1,10 @@
+# El sitio (Next.js) vive en frontend/, no en la raiz del repo. Sin este
+# fichero Netlify no sabe cual es el directorio base y despliega la raiz
+# del repositorio tal cual (sin build, sin index.html), lo que produce un
+# 404 en todas las rutas.
+#
+# Al fijar aqui el base directory, Netlify pasa a leer la configuracion de
+# build real desde frontend/netlify.toml (comando, publish, plugin de
+# Next.js), tal como describe ese fichero.
+[build]
+  base = "frontend"
