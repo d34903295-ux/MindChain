@@ -20,11 +20,18 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable
 
+import os
+
 from . import llm
 
 MODELO_RAPIDO = "phi4-mini"        # 3,3s · 2,5 GB · supera el filtro siempre (medido)
 MODELO_LIGERO = "llama3.2:3b"      # 3,5s · 2,0 GB · el más ligero que aguanta
-MODELO_Fuerte = "qwen2.5:7b"       # 7,5s · 4,7 GB · para lo que exige criterio
+MODELO_Fuerte = "qwen2.5:7b"
+
+# El nodo de chat redacta sobre datos reales: es el único que se justifica con
+# el modelo grande. Se cambia por entorno sin tocar código (phi4-mini va 3x más
+# rápido y se inventa cifras; qwen2.5:3b es el punto medio).
+MODELO_CHAT = os.getenv("CHAINMIND_MODELO_CHAT", MODELO_Fuerte)       # 7,5s · 4,7 GB · para lo que exige criterio
 
 # Regla común a todos. Va en cada prompt porque un modelo de 3B no arrastra el
 # contexto: si no se repite, no lo cumple.
@@ -182,13 +189,18 @@ CHAT = Agent(
         "Si no necesitas datos, responde directamente y sé breve.\n"
         "Nunca inventes el resultado de una herramienta: si no la has llamado, no tienes datos."
     ),
-    model=MODELO_RAPIDO,
+    model=MODELO_CHAT,  # redactar sobre diez filas de datos y describir un
+                           # gráfico sí exige criterio; si no está instalado
+                           # cae al del proveedor (ver llm.modelo_disponible)
     temperature=0.2,
-    max_tokens=520,
+    max_tokens=760,
     tools=(
-        "analizar_wallet(address, chain) — perfil, score y señales de una wallet",
-        "analizar_contrato(address) — permisos y hallazgos de un contrato",
-        "investigar(address, max_depth, direction) — trazado de fondos",
+        "wallet(address, chain) — perfil, score, señales y explicación de una wallet",
+        "contrato(address, chain) — permisos, proxy y hallazgos de un contrato",
+        "rastreo(address, max_depth, direction) — por dónde ha pasado el dinero",
+        "top_wallets(chain, bloques, top) — qué dirección se ha movido más, con serie por bloque",
+        "comparar(addresses, chain) — dos o más wallets en la misma tabla",
+        "resumen(chain, bloques) — actividad de la cadena, con serie por bloque",
         "feed(chain) — actividad reciente y alertas del centinela",
         "estado() — proveedores de IA, centinela, guard y calidad de datos",
         "watchlist() — direcciones vigiladas y su motivo",
@@ -258,12 +270,16 @@ def run(nombre: str, user: str, fallback: str, *, score: int | None = None,
     viola las reglas propias de su rol.
     """
     agente = get(nombre)
+    pedido = model or agente.model
+    # Si el modelo del agente no está instalado, se usa el del proveedor en vez
+    # de dejar el nodo entero en modo determinista.
+    elegido = pedido if llm.modelo_disponible(pedido) else None
     res = llm.complete(
         agente.prompt(), user,
         max_tokens=max_tokens or agente.max_tokens,
         temperature=agente.temperature if temperature is None else temperature,
         purpose=agente.name,
-        model=model or agente.model,
+        model=elegido,
     )
     if not res.get("ok"):
         return {"text": fallback, "agente": agente.name, "source": "determinista",

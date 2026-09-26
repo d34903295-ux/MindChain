@@ -212,6 +212,24 @@ def ollama_sugerido() -> str | None:
     return max(generadores, key=tamano)
 
 
+def modelo_disponible(model: str | None) -> bool:
+    """¿Está este modelo instalado en el proveedor activo?
+
+    Sin esto, un agente que pida `qwen2.5:7b` en una máquina que solo tiene
+    `phi4-mini` no falla: se le cae al modelo por defecto en vez de dejar al
+    chat entero en modo determinista. Reutiliza la caché de `ollama_models`.
+    """
+    if not model:
+        return True
+    provider = active()
+    if provider == "ollama":
+        instalados = ollama_models()
+        if not instalados:  # no se pudo preguntar: no bloquear el chat
+            return True
+        return any(model == m or model == m.split(":")[0] for m in instalados)
+    return True
+
+
 def status() -> dict:
     """Auditable desde /status: qué IA está activa, cuánto costó y si falla."""
     with _lock:

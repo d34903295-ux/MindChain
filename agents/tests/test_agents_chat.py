@@ -7,6 +7,7 @@ Lo que se protege aquí:
 - el chat responde aunque no haya modelo (el determinista es la red de seguridad)
 """
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -115,6 +116,33 @@ def test_acepta_score_correcto(monkeypatch):
     _mock_ollama(monkeypatch, "El score es de 12/100 y no muestra señales de riesgo relevantes.")
     r = agents.run("explicacion", "datos", "texto-fijo", score=12)
     assert r["source"] == "llm"
+
+
+def test_un_modelo_que_no_esta_instalado_cae_al_del_proveedor(monkeypatch):
+    """Un agente puede pedir un modelo que esta máquina no tiene.
+
+    Si no se comprueba, el chat entero se queda en texto determinista en una
+    instalación normal. Lo que no puede pasar es que se note.
+    """
+    monkeypatch.setattr(llm, "active", lambda: "ollama")
+    monkeypatch.setattr(llm, "ollama_models", lambda: ["phi4-mini:latest"])
+    assert llm.modelo_disponible("qwen2.5:7b") is False
+    assert llm.modelo_disponible("phi4-mini") is True
+    assert llm.modelo_disponible("phi4-mini:latest") is True
+    assert llm.modelo_disponible(None) is True
+
+
+def test_sin_poder_preguntar_a_ollama_no_se_bloquea(monkeypatch):
+    """Si /api/tags falla, no se puede saber qué hay: se deja pasar."""
+    monkeypatch.setattr(llm, "active", lambda: "ollama")
+    monkeypatch.setattr(llm, "ollama_models", lambda: [])
+    assert llm.modelo_disponible("lo-que-sea") is True
+
+
+def test_el_chat_usa_el_modelo_fuerte_para_redactar():
+    """Escribir sobre datos es lo único que aquí justifica el modelo grande."""
+    assert agents.REGISTRY["chat"].model == agents.MODELO_CHAT
+    assert agents.MODELO_CHAT == os.environ.get("CHAINMIND_MODELO_CHAT", agents.MODELO_Fuerte)
 
 
 # ------------------------------------------------------------------- chat

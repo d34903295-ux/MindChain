@@ -115,7 +115,11 @@ def test_herramientas_del_chat_publicas():
     r = client.get("/chat/herramientas")
     assert r.status_code == 200
     nombres = {h["nombre"] for h in r.json()["herramientas"]}
-    assert {"analizar_wallet", "analizar_contrato", "investigar", "feed", "estado"} <= nombres
+    # El `nombre` publicado es la clave del registro: el catálogo que lee el
+    # enrutado por IA y el que se puede ejecutar no pueden ser dos vocabularios.
+    assert {"wallet", "contrato", "rastreo", "top_wallets", "comparar",
+            "resumen", "feed", "estado", "watchlist"} <= nombres
+    assert {"analizar_wallet", "investigar"} & nombres == set(), "nombres antiguos retirados"
 
 
 def test_middleware_exige_clave_a_un_host_externo(monkeypatch):
