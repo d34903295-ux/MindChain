@@ -1,8 +1,18 @@
+import logging
 import os
 import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+# Sin esto, un `log.warning` de un logger de módulo sale por el `lastResort` de
+# Python: sin formato, sin hora y fuera del log de uvicorn, que es donde se
+# mira cuando algo falla. Con esto, los fallos de persistencia quedan en
+# `%TEMP%\chainmind_backend.log` con contexto.
+logging.basicConfig(
+    level=os.getenv("CHAINMIND_LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+)
 
 # `.env` estaba en requirements pero nunca se cargaba: escribirlo no hacía nada.
 try:

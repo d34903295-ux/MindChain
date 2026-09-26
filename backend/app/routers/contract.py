@@ -9,6 +9,8 @@ from agents.chains import get_chain
 from agents.contract_analyzer import fetch_contract, analyze_contract
 from agents.alerts import alert_if_risky
 
+from app.db import persistence as persist
+
 router = APIRouter()
 
 class ContractRequest(BaseModel):
@@ -26,15 +28,17 @@ def analyze_contract_ep(payload: ContractRequest):
     rep = analyze_contract(payload.address, fetched)
     rep["chain"] = payload.chain.lower()
     rep["elapsed_s"] = round(time.time() - t0, 2)
-    try:
+    # BUG C: mismo `except: pass` que en analyze.py. El nodo Contract se
+    # perdía en silencio cada vez que Neo4j no estaba.
+    def _a_neo4j_contrato():
         from app.db.neo4j_driver import get_driver
         d = get_driver()
         with d.session() as s:
             s.run("MERGE (c:Contract {address:$a, chain:$ch}) SET c.riskScore=$s, c.verified=$v",
                   a=payload.address.lower(), ch=payload.chain.lower(),
                   s=int(rep["risk_score"]), v=bool(rep["verified"]))
-    except Exception:
-        pass
+
+    rep["persistence"] = {"neo4j": persist.attempt("neo4j:contract", _a_neo4j_contrato)}
     rep["alert"] = alert_if_risky("contract", payload.address, payload.chain.lower(),
                                   rep["risk_score"], rep.get("permissions", []))
     return rep

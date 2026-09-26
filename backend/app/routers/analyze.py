@@ -11,6 +11,7 @@ from agents.wallet_intelligence import build_profile
 from agents.risk_scoring import score_wallet
 from agents.explanation import explain, explain_detailed
 from agents.alerts import alert_if_risky
+from app.db import persistence as persist
 
 router = APIRouter()
 
@@ -70,17 +71,26 @@ def _analyze_wallet(payload: AnalyzeRequest) -> dict:
             "cached": bool(fetched.get("cached")),
             "data_quality": dq,
             "alert": {"sent": False, "reason": "sin-datos"},
+            "persistence": {"postgres": persist.omitida("sin score: nada que evaluar"),
+                            "neo4j": persist.omitida("sin score: nada que evaluar")},
         }
-    try:
+
+    # BUG C: estos dos intentos se tragan el error con `pass`. Como no hay
+    # Postgres ni Neo4j, TODAS las llamadas fallaban al guardar y devolvían
+    # 200 sin decirlo. Ahora cada destino informa de su estado y el motivo del
+    # fallo queda en el log.
+    def _a_postgres():
         from app.db.postgres import upsert_wallet_report
         upsert_wallet_report(payload.address, profile, score, factors, text)
-    except Exception:
-        pass
-    try:
+
+    def _a_neo4j():
         from app.db.neo4j_driver import save_wallet_graph
         save_wallet_graph(payload.address, profile, txs, score, chain=payload.chain.lower())
-    except Exception:
-        pass
+
+    estado_persistencia = {
+        "postgres": persist.attempt("postgres", _a_postgres),
+        "neo4j": persist.attempt("neo4j", _a_neo4j),
+    }
     alert = alert_if_risky("wallet", payload.address, payload.chain.lower(), score, factors)
     obsidian_res = _try_obsidian({
         "address": payload.address,
@@ -97,4 +107,5 @@ def _analyze_wallet(payload: AnalyzeRequest) -> dict:
             "ai": det.get("ai"),
             "elapsed_s": elapsed, "source": fetched.get("source"),
             "cached": bool(fetched.get("cached")), "data_quality": dq,
-            "alert": alert, "obsidian": obsidian_res}
+            "alert": alert, "obsidian": obsidian_res,
+            "persistence": estado_persistencia}
