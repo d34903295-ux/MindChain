@@ -21,7 +21,7 @@ silencio (los sprites pixel-art, por ejemplo: una fila de 11 columnas no rompe
 la página, rompe el dibujo). Antes de afirmar que algo está hecho:
 
 ```bash
-python -m pytest agents/tests backend/tests -q   # 247 tests
+python -m pytest agents/tests backend/tests -q   # 294 tests
 python scripts/verificar_sprites.py              # anchuras de los sprites
 python scripts/verificar_movimiento.py           # ciclo de los robots
 python scripts/verificar_sala.py                 # que la sala se renderiza
@@ -50,6 +50,31 @@ sesión ya iniciada no aparecen como comandos nuevos. La copia del repo está en
 Se instaló sin hooks a propósito: los hooks ejecutan código en cada sesión y
 modifican el comportamiento del agente sin pedir permiso. Si los quieres, es
 `node scripts/ecc.js install --profile developer --target opencode --enable-hooks`.
+
+## El chat
+
+`agents/chat.py` decide en tres capas, y el orden importa:
+
+1. **Tabla de intenciones** (sin IA): detecta dirección, red e intención.
+2. **Herramientas reales**: `wallet`, `contrato`, `rastreo`, `top_wallets`,
+   `comparar`, `resumen`, `feed`, `estado`, `watchlist`. Los datos los calcula
+   el código, nunca el modelo.
+3. **Enrutado por IA** (solo si las dos anteriores no resuelven): el modelo
+   elige herramienta del catálogo y devuelve JSON. Sus argumentos se sanean
+   (`_sanea_args`) y el nombre se resuelve contra el registro
+   (`_coincide_herramienta`, tolera erratas). Si algo no cuadra, se cae al
+   determinista.
+
+Reglas que no hay que romper aquí:
+
+- El `nombre` de `herramientas_publicas()` **es** la clave de `HERRAMIENTAS`.
+  Si divergen, el modelo pide cosas que no existen.
+- Las herramientas de agregado devuelven `serie` (una fila por bloque) y
+  `ranking`. `frontend/components/ChatGrafico.tsx` los dibuja; el prompt de
+  redacción solo nombra el gráfico que existe de verdad.
+- Al modelo se le manda `_contexto_herramienta()`, no el dict crudo: el volcado
+  se truncaba y la serie se perdía, y el modelo acababa diciendo que no había
+  volumen.
 
 ## Reglas del proyecto
 
