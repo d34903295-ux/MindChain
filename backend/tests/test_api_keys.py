@@ -136,6 +136,38 @@ def test_middleware_acepta_clave_valida(monkeypatch):
 
 
 def test_rutas_publicas_no_exigen_clave(monkeypatch):
+    """Solo lo que no devuelve datos del usuario puede quedar abierto.
+
+    /status y /anomaly/latest se quitaron de SIN_CLAVE: /status lleva la
+    watchlist y /anomaly/latest las anomalías de wallets reales. Con el
+    servicio en la red, cualquier sitio los leia sin clave.
+    """
     monkeypatch.setattr("app.auth.es_local", lambda h: False)
-    for ruta in ("/status", "/chains", "/chat/herramientas", "/anomaly/latest"):
+    for ruta in ("/chains", "/health", "/chat/herramientas"):
         assert client.get(ruta).status_code != 401, ruta
+
+
+def test_rutas_con_datos_exigen_clave_desde_fuera(monkeypatch):
+    monkeypatch.setattr("app.auth.es_local", lambda h: False)
+    for ruta in ("/status", "/anomaly/latest", "/watchlist"):
+        assert client.get(ruta).status_code == 401, ruta
+
+
+def test_cors_no_deja_origenes_en_comodin():
+    """El comodin exponia la API a cualquier pagina que visitara el usuario."""
+    from app.main import _origenes_permitidos
+
+    origenes = _origenes_permitidos()
+    assert "*" not in origenes
+    assert origenes == [o for o in origenes if o]
+    assert any("localhost:3000" in o for o in origenes)
+
+
+def test_cors_responde_con_el_origen_permitido():
+    r = client.get("/health", headers={"Origin": "http://localhost:3000"})
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+def test_cors_no_responde_con_un_origen_ajeno():
+    r = client.get("/health", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in r.headers

@@ -30,7 +30,34 @@ from app.routers.chat_router import router as chat_router
 from app.routers.chat_router import SIN_CLAVE
 
 app = FastAPI(title="ChainMind API", version="0.11.0-agentes")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+def _origenes_permitidos() -> list[str]:
+    """Orígenes desde los que el navegador puede llamar a la API.
+
+    Antes esto era `allow_origins=["*"]`. Con el servicio escuchando en
+    localhost, el navegador de cualquier web que visite el usuario conecta
+    desde 127.0.0.1, así que la API lo veía como "local" y le devolvía los
+    datos con `Access-Control-Allow-Origin: *`: cualquier página podía leer
+    el feed, la watchlist y pedir claves de API. La lista blanca es la del
+    frontend de verdad; se amplía con CHAINMIND_CORS_ORIGINS.
+    """
+    por_defecto = "http://localhost:3000,http://127.0.0.1:3000"
+    crudos = os.getenv("CHAINMIND_CORS_ORIGINS", por_defecto)
+    return [o.strip() for o in crudos.split(",") if o.strip()]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origenes_permitidos(),
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key"],
+    allow_credentials=False,
+    # Sin peticiones a la red privada: el navegador no debe dejar que una web
+    # alcanza el 127.0.0.1 del usuario. Es el valor por defecto de Starlette,
+    # pero se deja explícito porque es parte de la defensa.
+    allow_private_network=False,
+)
 app.include_router(analyze_router)
 app.include_router(contract_router)
 app.include_router(anomaly_router)

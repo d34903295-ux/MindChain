@@ -14,11 +14,15 @@ from agents import chat
 
 router = APIRouter()
 
-# Rutas que nunca exigen clave: son de solo lectura y no devuelven datos de
-# ninguna wallet. El resto sí, para que un tercero no pueda usarlas de Horse.
+# Rutas que nunca exigen clave. Solo las que no devuelven nada del usuario:
+# /status y /anomaly/latest salen de aquí porque /status incluye la watchlist
+# y /anomaly/latest las anomalías detectadas sobre wallets reales.
+# Para el panel de esta misma máquina da igual: `requiere_clave` ya las abre
+# cuando el host es local. Lo que cambia es que un cliente de la red ya no
+# las lee sin clave.
 SIN_CLAVE = {
-    "/status", "/chains", "/health", "/docs", "/openapi.json", "/",
-    "/chat/herramientas", "/anomaly/latest",
+    "/chains", "/health", "/docs", "/openapi.json", "/",
+    "/chat/herramientas",
 }
 
 
