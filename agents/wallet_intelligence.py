@@ -27,12 +27,60 @@ def _parse_time(value):
     return None
 
 
+WEI = 10 ** 18
+
+
 def _num(v, default=0.0) -> float:
     try:
         f = float(v)
         return default if f != f else f
     except Exception:
         return default
+
+
+def _wei_to_eth(v) -> float:
+    """wei -> ETH. Se parsea como entero para no perder precisión con saldos grandes."""
+    if v is None:
+        return 0.0
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return 0.0
+        try:
+            return int(s, 16 if s.lower().startswith("0x") else 10) / WEI
+        except ValueError:
+            return 0.0
+    try:
+        return float(v) / WEI
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _balance_usd(raw: dict, price) -> tuple[float, str]:
+    """(balance en USD, de dónde sale).
+
+    El bug: solo se leía `raw["balance_usd"]`, que en el camino de fallback RPC
+    no existe y en Blockscout venía hardcodeado a 0.0. Una wallet con 87 ETH
+    y el precio a 2692 USD se publicaba como $0. Y no era solo cosmético:
+    `risk_scoring` da +10 a partir de 1.000.000 USD, así que esa regla de
+    riesgo no se podía disparar nunca en fallback.
+
+    Los tres caminos (blockchair, blockscout y snapshot RPC) dan el balance en
+    wei, así que derivar wei/1e18 × precio es válido en todos. Si la fuente ya
+    trae el USD, manda ella. Sin precio no hay conversión posible y se devuelve
+    0, que es lo único honesto.
+    """
+    dado = raw.get("balance_usd")
+    if dado is not None:
+        v = _num(dado)
+        if v > 0:
+            return v, "adapter"
+    eth = _wei_to_eth(raw.get("balance"))
+    if eth <= 0:
+        return 0.0, "sin_datos"
+    if not price:
+        return 0.0, "sin_precio"
+    return round(eth * float(price), 2), "derivado_del_wei"
 
 
 def _sample_confidence(n: int) -> str:
@@ -141,10 +189,7 @@ def profile_wallet(address: str, txs: list[dict], raw: dict | None = None) -> di
         peak = hist.most_common(1)[0][0]
         tz_note = f"hora_pico_utc_{peak}h_muestra_reducida"
 
-    try:
-        bal_usd = _num(raw.get("balance_usd"))
-    except Exception:
-        bal_usd = 0.0
+    bal_usd, balance_usd_source = _balance_usd(raw, price)
 
     labels = ["contract" if raw.get("type") == "contract" else "eoa"]
     if bal_usd > 1_000_000:
@@ -179,6 +224,7 @@ def profile_wallet(address: str, txs: list[dict], raw: dict | None = None) -> di
         "out_usd_sample": round(out_usd, 2) if usd_priced else None,
         "balance_wei": str(raw.get("balance") or 0),
         "balance_usd": bal_usd,
+        "balance_usd_source": balance_usd_source,
         "freq_tx_day": freq_day,
         "activity": activity,
         "bot_like": bot_like,
