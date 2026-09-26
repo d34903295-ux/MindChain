@@ -11,10 +11,59 @@ Fase 0: Setup monorepo + Postgres + Neo4j + Indexer Subsquid EVM
 
 ## Quickstart
 1. Copiar env: `cp .env.example .env` y rellenar `ETH_RPC_URL`
-2. Levantar stack: `docker compose up --build`
-3. Backend: http://localhost:8000/docs — `GET /health`, `POST /analyze-wallet` (stub Fase 0)
+2. Levantar stack: `docker compose up --build` — **no funciona en EC2**, ver más abajo
+3. Backend: http://localhost:8000/docs — `GET /health`, `POST /analyze-wallet`
 4. Neo4j browser: http://localhost:7474 — user/pass de `.env`
-5. Indexer: plantilla Subsquid EVM, ver `/indexer/README.md`
+5. Indexer: plantilla Subsquid EVM, ver `/indexer/README.md` (hoy no escribe nada)
+
+## Postgres y Neo4j sin Docker (Windows Server en EC2)
+
+`docker compose up` **no se puede usar en esta máquina**: es Windows Server 2022
+sobre una instancia EC2, sin gestor de paquetes y sin virtualización anidada, y
+Docker Desktop no soporta Windows Server. WSL2 y Hyper-V necesitan virtualización
+anidada, que una instancia ya virtualizada no ofrece; habilitarlas además
+exigiría reiniciar el host.
+
+Las dos bases van instaladas de forma nativa, con los mismos usuarios y
+contraseña que usa `docker-compose.yml`, así que los valores por defecto de
+`backend/app/db/` funcionan sin configurar nada:
+
+```powershell
+# PostgreSQL 16.10 (servicio postgresql-x64-16, puerto 5432)
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -h 127.0.0.1 `
+    -c "CREATE ROLE chainmind LOGIN PASSWORD 'chainmind_dev'" -c "CREATE DATABASE chainmind OWNER chainmind"
+# el schema, con el usuario que va a ser dueño de las tablas (si no, en PG15+
+# no ve ninguna: el schema public no da permisos a quien no es dueño)
+Get-Content db\postgres\init.sql -Raw | & "C:\Program Files\PostgreSQL\16\bin\psql.exe" `
+    -U chainmind -h 127.0.0.1 -d chainmind
+
+# Neo4j 5.26.0 community (servicio Neo4j, puertos 7687 y 7474)
+# necesita Java 21 en el PATH: el zip no lo trae embebido
+$env:JAVA_HOME = "C:\jdk-21.0.12.1+1"
+& "C:\neo4j-community-5.26.0\bin\neo4j-admin.bat" dbms set-initial-password chainmind_dev
+& "C:\neo4j-community-5.26.0\bin\neo4j.bat" windows-service install
+Start-Service Neo4j
+Get-Content db\neo4j\init.cypher -Raw | & "C:\neo4j-community-5.26.0\bin\cypher-shell.bat" `
+    -u neo4j -p chainmind_dev
+
+# drivers, que estan en requirements.txt pero no vienen con el interprete
+python -m pip install "psycopg[binary]==3.1.*" "neo4j==5.22.*" "python-dotenv==1.0.*"
+```
+
+Comprobar el estado real de ambas (no el `ok` que dice la API):
+
+```bash
+python scripts/verificar_bases.py
+```
+
+Dos avisos que ya están comprobados:
+
+- `MATCH (:Wallet)-[r:TRANSACTED_WITH]->(:Wallet)` devuelve **0 siempre**: ese
+  tipo de relación no existe, solo se escriben `SENT` y `TO`
+  (`backend/app/db/neo4j_driver.py:26`). Neo4j avisa con
+  `UnknownRelationshipTypeWarning`.
+- `raw_transactions` está a 0 aunque la base esté levantada: el handler del
+  indexer solo hace `ctx.log.info` y no persiste (`indexer/src/main.ts`).
 
 ## IA
 
