@@ -81,15 +81,30 @@ def _fallback(profile: dict, score: int | None, factors: list[str]) -> str:
     chain = profile.get("chain", "ethereum")
     chain_label = {"ethereum": "Ethereum", "base": "Base"}.get(str(chain).lower(), str(chain))
 
-    # Sin datos no hay veredicto: se dice explícitamente.
+    # Sin score no hay veredicto: se dice explícitamente. Y se distingue POR
+    # QUÉ no lo hay, porque no es lo mismo y decir «no se pudieron obtener
+    # datos» cuando sí los hay es mentira: una wallet con 1 transacción
+    # provides datos, lo que no tiene es muestra para puntuar.
     if score is None:
         errores = profile.get("data_errors") or []
-        detalle = (" No se pudieron obtener datos de la cadena"
-                   + (f" ({errores[0]})" if errores else "")
-                   + ", por lo que esta wallet no se evalúa. Reintenta en unos segundos.")
         if profile.get("insufficient_data"):
+            detalle = (" No se pudieron obtener datos de la cadena"
+                       + (f" ({errores[0]})" if errores else "")
+                       + ", por lo que esta wallet no se evalúa. Reintenta en unos segundos.")
             return f"Wallet {a} ({chain_label}): sin datos suficientes para analizarla." + detalle
-        return f"Wallet {a} ({chain_label}): la evaluación no está disponible." + detalle
+        conf = str(profile.get("sample_confidence") or "").lower()
+        if conf in ("nula", "baja"):
+            n_muestra = profile.get("sample_size")
+            if isinstance(n_muestra, int):
+                muestra_txt = "1 transacción" if n_muestra == 1 else f"{n_muestra} transacciones"
+            else:
+                muestra_txt = "sin transacciones en el histórico consultado"
+            return (f"Wallet {a} ({chain_label}): hay datos, pero la muestra es demasiado pequeña "
+                    f"para puntuar con criterio ({muestra_txt} en la muestra, confianza "
+                    f"'{conf}'). No se le pone score a propósito: un número aquí sería "
+                    f"apariencia de análisis, no análisis. Con más actividad se podrá evaluar.")
+        return (f"Wallet {a} ({chain_label}): la evaluación no está disponible. "
+                f"Sin datos suficientes y sin motivo concreto registrado.")
 
     lvl = "bajo" if score < 30 else ("medio" if score < 70 else "alto")
     age_txt = f"{age} días" if isinstance(age, int) else "sin fecha de primera actividad conocida"

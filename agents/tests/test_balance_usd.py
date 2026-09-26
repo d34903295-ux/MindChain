@@ -84,16 +84,30 @@ def test_un_balance_basura_no_revienta(precio):
 
 
 # ------------------------------------------------------- etiquetas y scoring
+def _muestra(n=25):
+    """n transacciones plausibles. 25 -> sample_confidence 'alta'."""
+    return [{"hash": "0x" + f"{i:064x}", "from": "0x" + "a" * 40,
+             "to": "0x" + f"{i:040x}", "value_eth": 1.0, "value_usd": 2000.0,
+             "block": 1000 + i, "time": "2026-09-20T10:00:00Z",
+             "score": 5, "flags": [], "alert": False} for i in range(n)]
+
+
 def test_la_etiqueta_whale_aparece_con_el_balance_derivado(precio):
     """wallet_intelligence marcaba 'whale' a partir de 1M USD: no se disparaba."""
-    p = profile_wallet("0x" + "a" * 40, [], {"balance": BALANCE_WEI})
+    p = profile_wallet("0x" + "a" * 40, _muestra(), {"balance": BALANCE_WEI})
     assert "whale" in p["labels"]
 
 
 def test_la_regla_de_riesgo_de_whale_se_dispara(precio):
-    """El bug que de verdad importaba: +10 y factor de balance alto."""
-    p = profile_wallet("0x" + "a" * 40, [], {"balance": BALANCE_WEI})
-    score, factores = score_wallet(p, [])
+    """El bug que de verdad importaba: +10 y factor de balance alto.
+
+    Con muestra suficiente: una wallet sin análisis previo puede ser una whale
+    legítima con 20+ transacciones y eso debe reflejarse en el score.
+    """
+    txs = _muestra()
+    p = profile_wallet("0x" + "a" * 40, txs, {"balance": BALANCE_WEI})
+    assert p["sample_confidence"] == "alta"
+    score, factores = score_wallet(p, txs)
     assert score is not None
     assert "balance_alto_wallet_reciente" in factores
     assert score >= 10
@@ -102,11 +116,13 @@ def test_la_regla_de_riesgo_de_whale_se_dispara(precio):
 def test_sin_el_arreglo_la_regla_no_se_dispararia(monkeypatch):
     """Control: con el comportamiento viejo (0.0) el factor no aparece.
 
-    Fija que el test anterior really depende del arreglo y no del azar.
+    Fija que el test anterior realmente depende del arreglo y no del azar.
     """
     monkeypatch.setattr(WI, "get_price_usd", lambda *a, **k: None)
-    p = profile_wallet("0x" + "a" * 40, [], {"balance": BALANCE_WEI})
-    _, factores = score_wallet(p, [])
+    txs = _muestra()
+    p = profile_wallet("0x" + "a" * 40, txs, {"balance": BALANCE_WEI})
+    assert p["balance_usd"] == 0.0
+    _, factores = score_wallet(p, txs)
     assert "balance_alto_wallet_reciente" not in factores
 
 

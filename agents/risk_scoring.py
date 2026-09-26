@@ -33,6 +33,20 @@ def score_wallet(profile: dict, txs: list[dict]) -> tuple[int | None, list[str]]
     # --- abstención: no hay datos suficientes para juzgar
     if profile.get("insufficient_data"):
         return None, ["datos_insuficientes_no_evaluable"]
+
+    # BUG B: una muestra de 0 a 7 transacciones no sostiene un score. Antes se
+    # puntuaba igual y solo se añadía un factor informativo
+    # ("datos_insuficientes_score_provisional"), así que el endpoint devolvía
+    # una cifra con aspecto de válido sobre una base de evidencia que no la
+    # respaldaba. Con bloque en 0 se llegaba a "risk_score: 0" para una wallet
+    # de la que no se había visto ni una transacción.
+    # Se abstiene ANTES de acumular: con la muestra vacía, las reglas de
+    # balance y antigüedad no sumaban nada (bal = 0), y con muestra baja
+    # sumaban sobre datos que no dan soporte a la conclusión.
+    # La ausencia del campo no es "muestra nula": es un perfil que no lo trae,
+    # y esas llamadas internas siguen puntuando.
+    if str(profile.get("sample_confidence") or "").strip().lower() in ("nula", "baja"):
+        return None, ["datos_insuficientes_no_evaluable"]
     try:
         tx_count = profile.get("tx_count")
         tx_count = int(tx_count) if tx_count is not None else None
@@ -111,11 +125,6 @@ def score_wallet(profile: dict, txs: list[dict]) -> tuple[int | None, list[str]]
     if bal > 1_000_000 and (age is None or age < 90):
         score += 10
         factors.append("balance_alto_wallet_reciente")
-
-    # -------------------------------------------------- 8) confianza de datos
-    conf = profile.get("sample_confidence")
-    if conf in ("nula", "baja"):
-        factors.append("datos_insuficientes_score_provisional")
 
     # ------------------------------------ 7) convoy: muchas tx del mismo origen
     burst = defaultdict(int)

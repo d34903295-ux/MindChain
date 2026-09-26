@@ -208,13 +208,23 @@ def test_riesgo_no_usa_contador_no_confiable():
     s, f = score_wallet({"address": addr, "tx_count": None, "tx_count_reliable": False,
                         "sample_confidence": "nula"}, [])
     assert "wallet_nueva_pocas_txs" not in f
-    assert "datos_insuficientes_score_provisional" in f
+    # BUG 2: con muestra nula ya no se devuelve un número, sino la abstención
+    assert s is None
+    assert f == ["datos_insuficientes_no_evaluable"]
 
 
-def test_score_es_provisional_con_poca_muestra():
+def test_score_none_con_poca_muestra():
+    """Con 1-7 transacciones el score es None, no un número con aire de válido.
+
+    Antes devolvía un score y solo añadía el factor informativo
+    `datos_insuficientes_score_provisional`, así que el endpoint enseñaba una
+    cifra que no sostenía la evidencia.
+    """
     addr = "0x" + "a" * 40
     s, f = score_wallet({"address": addr, "tx_count": 100, "sample_confidence": "baja"}, [])
-    assert "datos_insuficientes_score_provisional" in f
+    assert s is None, "una muestra de 1-7 tx no sostiene un score"
+    assert "datos_insuficientes_no_evaluable" in f
+    assert "datos_insuficientes_score_provisional" not in f
 
 
 def test_score_none_cuando_no_hay_datos():

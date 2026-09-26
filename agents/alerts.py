@@ -25,6 +25,11 @@ def send_telegram(text):
         return {"sent": False, "reason": str(e)[:200]}
 
 def alert_if_risky(kind, address, chain, score, factors):
+    if score is None:
+        # Abstención (muestra insuficiente): no es un error, es "no evaluable".
+        # Sin esta guarda, int(None) caía en el except y la razón que se
+        # reportaba era "error-interno", que no es lo que pasó.
+        return {"sent": False, "reason": "sin-score-no-evaluable"}
     try:
         if int(score) < RISK_THRESHOLD:
             return {"sent": False, "reason": "bajo-umbral"}
