@@ -1,22 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ChatDatos from "../../components/ChatGrafico";
 
 type Msg = {
   rol: "user" | "bot";
   texto: string;
   herramienta?: string | null;
+  enrutado?: string | null;
   fuente?: string;
   modelo?: string;
   motivo?: string;
   ms?: number;
+  datos?: Record<string, unknown> | null;
 };
 
 const EJEMPLOS = [
-  "¿Cómo va el sistema?",
-  "Analiza 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 en base",
+  "¿Qué wallet se movió más en los últimos 5 bloques?",
+  "Dame un resumen de la actividad en base",
+  "Compara 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 y 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
   "¿Qué pasa en el feed de ethereum?",
+  "Analiza 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 en base",
   "¿Qué wallets vigilamos?",
+  "¿Cómo va el sistema?",
 ];
 
 export default function ChatPage() {
@@ -25,14 +31,13 @@ export default function ChatPage() {
   const [pensando, setPensando] = useState(false);
   const [error, setError] = useState("");
   const finRef = useRef<HTMLDivElement>(null);
+  const preguntaDeUrl = useRef(false);
 
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [mensajes, pensando]);
 
-  async function enviar(e: React.FormEvent) {
-    e.preventDefault();
-    const pregunta = texto.trim();
+  async function preguntar(pregunta: string) {
     if (!pregunta || pensando) return;
     setError("");
     setTexto("");
@@ -57,10 +62,12 @@ export default function ChatPage() {
           rol: "bot",
           texto: j.respuesta,
           herramienta: j.herramienta,
+          enrutado: j.enrutado,
           fuente: j.source,
           modelo: j.modelo,
           motivo: j.motivo,
           ms: Math.round(performance.now() - t0),
+          datos: j.datos ?? null,
         },
       ]);
     } catch (err) {
@@ -68,6 +75,21 @@ export default function ChatPage() {
     } finally {
       setPensando(false);
     }
+  }
+
+  // /chat?q=… deja la pregunta escrita y ejecutada al abrir: sirve para
+  // compartir un análisis concreto y para comprobar la pantalla sin teclear.
+  useEffect(() => {
+    if (preguntaDeUrl.current) return;
+    preguntaDeUrl.current = true;
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) void preguntar(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault();
+    await preguntar(texto.trim());
   }
 
   return (
@@ -78,7 +100,8 @@ export default function ChatPage() {
         <p className="section-lede">
           Usa los mismos agentes y las mismas fuentes que el resto de ChainMind. Si le pides una
           wallet, un contrato o una ruta de fondos, los datos son reales y están calculados aquí,
-          no inventados.
+          no inventados. También sabe ranking de actividad, resumen de la cadena y comparativa
+          entre wallets: cuando la respuesta trae números, los dibuja.
         </p>
       </header>
 
@@ -99,11 +122,14 @@ export default function ChatPage() {
         )}
 
         {mensajes.map((m, i) => (
-          <div key={i} className={m.rol === "user" ? "chat-burbuja user" : "chat-burbuja bot"}>
+          <div key={i}
+            className={`chat-burbuja ${m.rol === "user" ? "user" : "bot"}${m.datos ? " wide" : ""}`}>
             <p className="chat-texto">{m.texto}</p>
+            {m.rol === "bot" && <ChatDatos datos={m.datos} />}
             {m.rol === "bot" && (
               <p className="chat-meta">
                 {m.herramienta ? `herramienta: ${m.herramienta}` : "sin herramienta"}
+                {m.herramienta && m.enrutado ? ` (elegida por ${m.enrutado})` : ""}
                 {m.fuente === "llm" && m.modelo ? ` · ${m.modelo}` : " · texto determinista"}
                 {m.ms ? ` · ${(m.ms / 1000).toFixed(1)}s` : ""}
                 {m.fuente === "determinista" && m.motivo ? ` · ${m.motivo}` : ""}
@@ -135,7 +161,7 @@ export default function ChatPage() {
         <input
           id="chat-input"
           className="input"
-          placeholder="Analiza 0x… o pregúntame por el sistema"
+          placeholder="Analiza 0x…, dime qué wallet se movió más o compara dos"
           value={texto}
           onChange={e => setTexto(e.target.value)}
           autoComplete="off"
