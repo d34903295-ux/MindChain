@@ -16,3 +16,6 @@ reports_demo/
 # claves de API propias de ChainMind: NUNCA al repositorio
 data/
 api_keys.json
+
+# artefactos de compilacion de TypeScript
+*.tsbuildinfo
