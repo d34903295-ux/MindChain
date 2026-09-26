@@ -14,7 +14,11 @@
 # consultas fallan, porque el navegador pediria a su propio localhost.
 
 [build]
-  command = "npm run build"
+  # Se instala explicitamente antes del build: al fijar `base = "frontend"`
+  # desde el netlify.toml de la raiz, el paso automatico de instalacion de
+  # dependencias de Netlify no siempre lo detecta (por eso fallaba con
+  # "next: not found", exit 127), asi que no se depende de el.
+  command = "npm ci && npm run build"
   publish = ".next"
 
 [build.environment]
