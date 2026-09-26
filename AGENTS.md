@@ -21,7 +21,7 @@ silencio (los sprites pixel-art, por ejemplo: una fila de 11 columnas no rompe
 la página, rompe el dibujo). Antes de afirmar que algo está hecho:
 
 ```bash
-python -m pytest agents/tests backend/tests -q   # 294 tests
+python -m pytest agents/tests backend/tests -q   # 325 tests
 python scripts/verificar_sprites.py              # anchuras de los sprites
 python scripts/verificar_movimiento.py           # ciclo de los robots
 python scripts/verificar_sala.py                 # que la sala se renderiza
@@ -75,6 +75,36 @@ Reglas que no hay que romper aquí:
 - Al modelo se le manda `_contexto_herramienta()`, no el dict crudo: el volcado
   se truncaba y la serie se perdía, y el modelo acababa diciendo que no había
   volumen.
+
+## Las bases de datos en esta maquina
+
+Docker **no se puede instalar aqui**: es Windows Server 2022 en EC2, sin gestor
+de paquetes y sin virtualizacion anidada, y Docker Desktop no soporta Windows
+Server. Postgres y Neo4j van instalados de forma nativa, con los mismos
+nombres de usuario y contrasena que usa `docker-compose.yml`, para que los
+defaults de `app/db/` sirvan sin variables de entorno:
+
+- PostgreSQL 16.10 nativo, servicio `postgresql-x64-16`, puerto 5432,
+  rol/base `chainmind` / `chainmind_dev`, schema creado con `db/postgres/init.sql`
+- Neo4j 5.26.0 community en `C:\neo4j-community-5.26.0`, servicio `Neo4j`,
+  puertos 7687 (bolt) y 7474 (http), contrasena fijada con
+  `neo4j-admin dbms set-initial-password`, constraints de `db/neo4j/init.cypher`
+- Java 21 (Temurin) en `C:\jdk-21.0.12.1+1`: Neo4j 5.26 no lo trae embebido
+  y lo necesita en el PATH para `cypher-shell`
+
+```bash
+python scripts/verificar_bases.py      # estado real de ambas, no el "ok" de la API
+psql -U chainmind -h 127.0.0.1 -d chainmind -c "SELECT count(*) FROM wallets"
+```
+
+Ojo con dos cosas que ya vale:
+
+- **`TRANSACTED_WITH` no existe.** Solo se escriben `SENT` y `TO`
+  (`backend/app/db/neo4j_driver.py:26`). Preguntar por ese tipo de relacion
+  devuelve 0 siempre, tenga la base datos o no; Neo4j avisa con
+  `UnknownRelationshipTypeWarning`.
+- **El indexer sigue sin escribir nada.** `indexer/src/main.ts` solo hace
+  `ctx.log.info`; `raw_transactions` esta a 0 aunque la base este levantada.
 
 ## Reglas del proyecto
 

@@ -19,6 +19,7 @@ Lo que se fija aquí:
 - el análisis no se rompe si la base no está: sigue devolviendo 200
 """
 import logging
+import os
 import pathlib
 import sys
 
@@ -42,6 +43,19 @@ def _tx(i):
     return {"hash": "0x" + f"{i:064x}", "from": ADDR, "to": "0x" + f"{i:040x}",
             "value_eth": 1.0, "value_usd": 2000.0, "block": 1000 + i,
             "time": "2026-09-20T10:00:00Z", "score": 5, "flags": [], "alert": False}
+
+
+@pytest.fixture(autouse=True)
+def sin_tocar_la_base_real(monkeypatch):
+    """Por defecto los writers son falsos: la suite no escribe en la base real.
+
+    Importante desde que Postgres y Neo4j están levantados en esta máquina: sin
+    esto, cada test que llega a la rama de persistencia inserta filas de
+    mentira en la base de desarrollo.
+    """
+    _inyectar_db(monkeypatch,
+                 postgres={"upsert_wallet_report": lambda *a, **k: None},
+                 neo4j={"save_wallet_graph": lambda *a, **k: None})
 
 
 @pytest.fixture
@@ -81,27 +95,32 @@ def test_la_respuesta_siempre_dice_que_paso_con_cada_destino(wallet_con_datos):
     assert set(persist) == {"postgres", "neo4j"}
 
 
-def test_sin_base_de_datos_lo_dice_con_el_motivo(wallet_con_datos):
-    """No hay Postgres ni Neo4j: el estado es 'failed' y con razón."""
-    r = client.post("/analyze-wallet", json={"address": ADDR, "chain": "ethereum"})
-    persist = r.json()["persistence"]
-    for destino in ("postgres", "neo4j"):
-        estado = persist[destino]
-        assert estado.startswith("failed: "), f"{destino}: {estado}"
-        # el motivo tiene que decir algo, no un "failed:" a secas
-        assert len(estado) > len("failed: ")
-        assert ":" in estado[len("failed: "):], "el motivo incluye el tipo de error"
+def test_un_escritor_que_falla_lo_dice_con_el_motivo(wallet_con_datos, monkeypatch):
+    """El estado 'failed' lleva el tipo y el mensaje, no un 'failed' a secas."""
+    def postgres_explota(*a, **k):
+        raise RuntimeError("connection refused: could not connect to server")
+
+    _inyectar_db(monkeypatch, postgres={"upsert_wallet_report": postgres_explota},
+                 neo4j={"save_wallet_graph": lambda *a, **k: None})
+    persist = client.post("/analyze-wallet", json={"address": ADDR, "chain": "ethereum"}).json()["persistence"]
+    assert persist["postgres"].startswith("failed: ")
+    assert "RuntimeError" in persist["postgres"]
+    assert "connection refused" in persist["postgres"]
 
 
-def test_el_error_real_aparece_en_el_log(wallet_con_datos, caplog):
+def test_el_error_real_aparece_en_el_log(wallet_con_datos, monkeypatch, caplog):
     """El error se loguea con su tipo y su mensaje. Antes no se logueaba nada."""
+    def neo4j_explota(*a, **k):
+        raise RuntimeError("bolt timed out")
+
+    _inyectar_db(monkeypatch, postgres={"upsert_wallet_report": lambda *a, **k: None},
+                 neo4j={"save_wallet_graph": neo4j_explota})
     with caplog.at_level(logging.WARNING, logger="chainmind.persistence"):
         client.post("/analyze-wallet", json={"address": ADDR, "chain": "ethereum"})
     textos = [r.getMessage() for r in caplog.records]
-    assert any("persistencia" in t and "fallo" in t for t in textos), \
-        f"no se registró ningún fallo: {textos}"
-    # y el motivo del log es el mismo que va en la respuesta
-    assert any(("postgres" in t or "neo4j" in t) for t in textos)
+    assert any("persistencia neo4j fallo" in t for t in textos), \
+        f"no se registro el fallo de neo4j: {textos}"
+    assert any("bolt timed out" in t for t in textos)
 
 
 def _inyectar_db(monkeypatch, postgres=None, neo4j=None):
@@ -170,6 +189,46 @@ def test_el_analisis_no_se_rompe_sin_base_de_datos(wallet_con_datos):
     assert j["profile"]["balance_usd"] == 2000.0
     assert j["persistence"] is not None
 
+
+
+
+# ------------------------------------- contra la base real (opt-in, no por defecto)
+@pytest.mark.skipif(os.getenv("CHAINMIND_TEST_DB") != "1",
+                    reason="escribe en la base real: pon CHAINMIND_TEST_DB=1 para correrlo")
+def test_roundtrip_contra_la_base_real(monkeypatch):
+    """Espera 'ok' y comprueba que la fila existe de verdad en la base.
+
+    No se corre por defecto porque inserta en la base de desarrollo. Es la
+    unica forma de comprobar que 'ok' no es solo la opinion del proceso sobre
+    su propio INSERT.
+    """
+    # el fixture autouse pone modulos falsos en sys.modules: hay que quitar los
+    # dos para que los imports del router lleguen a los modulos de verdad
+    monkeypatch.delitem(sys.modules, "app.db.postgres", raising=False)
+    monkeypatch.delitem(sys.modules, "app.db.neo4j_driver", raising=False)
+    ADDR_REAL = "0x" + "b" * 40
+    r = client.post("/analyze-wallet", json={"address": ADDR_REAL, "chain": "ethereum"})
+    assert r.status_code == 200
+    persist = r.json()["persistence"]
+    assert persist["postgres"].startswith("ok"), persist["postgres"]
+    assert persist["neo4j"].startswith("ok"), persist["neo4j"]
+
+    import psycopg
+    from app.db.postgres import DATABASE_URL
+    with psycopg.connect(DATABASE_URL) as c:
+        with c.cursor() as cur:
+            cur.execute("SELECT count(*) FROM reports r JOIN wallets w ON w.id = r.wallet_id "
+                        "WHERE w.address = %s", (ADDR_REAL,))
+            assert cur.fetchone()[0] >= 1, "el report no llego a la base"
+
+    from neo4j import GraphDatabase
+    from backend.app.db.neo4j_driver import URI, USER, PASSWORD
+    d = GraphDatabase.driver(URI, auth=(USER, PASSWORD))
+    with d.session() as s:
+        n = s.run("MATCH (t:Transaction) WHERE t.from IS NULL OR true "
+                  "RETURN count(t) AS c").single()["c"]
+    d.close()
+    assert isinstance(n, int)
 
 # ------------------------------------------------------------- el log existe
 def test_el_logger_esta_configurado():
