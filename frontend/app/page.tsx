@@ -52,7 +52,7 @@ export default function Landing() {
               </div>
               <div className="stat">
                 <dt>Tests</dt>
-                <dd className="mono">243</dd>
+                <dd className="mono">247</dd>
               </div>
             </dl>
           </section>
@@ -81,7 +81,7 @@ export default function Landing() {
             </div>
             <div>
               <dt>Tests automatizados</dt>
-              <dd>243</dd>
+              <dd>247</dd>
             </div>
             <div>
               <dt>Análisis con IA local</dt>

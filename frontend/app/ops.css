@@ -217,15 +217,39 @@
    quedaba en blanco). Con width:100% y height:auto manda el viewBox. */
 .core-svg { display: block; width: 100%; height: auto; flex: 0 1 auto; }
 
-/* ---------------- planta de la sala ---------------- */
-.floor-svg { display: block; width: 100%; height: auto; flex: 0 1 auto; }
+/* ---------------- planta de la sala (pixel art) ---------------- */
+/* crispEdges es lo que hace que esto sea pixel art de verdad: sin él el
+   navegador suaviza los cuadrados y queda un dibujo vectorial. */
+/* La caja se mide con ResizeObserver y el viewBox va en píxeles reales, así
+   que el SVG tiene que ocupar exactamente el hueco: si se deja en alto
+   automático manda el viewBox y aparece la franja vacía. */
+.floor-box {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 13rem;
+  overflow: hidden;
+}
+.floor-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  shape-rendering: crispEdges;
+  image-rendering: pixelated;
+}
 .floor-station-name {
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  fill: #7c8798;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  fill: #475569;
   text-transform: uppercase;
 }
+@keyframes floor-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.15; } }
+.rack-led { animation: floor-blink 1.6s steps(1, end) infinite; }
+.blink { animation: floor-blink 0.9s steps(1, end) infinite; }
+@keyframes floor-spin { to { transform: rotate(360deg); } }
+.spin { animation: floor-spin 2.4s linear infinite; transform-box: fill-box; transform-origin: center; }
 .core-wrap {
   align-items: stretch;
 }
