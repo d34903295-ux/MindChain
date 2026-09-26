@@ -1,0 +1,33 @@
+# Despliegue en Netlify para la web de ChainMind.
+#
+# Este fichero va DENTRO de frontend/ porque en Netlify el directorio base del
+# sitio es `frontend`: la configuracion se lee desde ahi, no desde la raiz del
+# repositorio.
+#
+# Next.js 14 con App Router, desplegado con el runtime de Netlify y no como
+# exportacion estatica: asi `npm run start` sigue funcionando en local, que es
+# como se levanta la web en esta maquina.
+#
+# IMPORTANTE: la web sola no hace nada. Habla con la API de ChainMind, asi que
+# hay que definir NEXT_PUBLIC_API_URL en Site settings -> Environment variables
+# apuntando a un backend PUBLICO. Sin eso la pagina carga pero todas las
+# consultas fallan, porque el navegador pediria a su propio localhost.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Solo se sirve la web; no hay ficheros estaticos propios que proteger.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

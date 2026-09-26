@@ -1,3 +1,4 @@
+import { API_BASE } from "../lib/api";
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Sora, JetBrains_Mono } from "next/font/google";
@@ -82,7 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav aria-label="Recursos">
               <h2>Recursos</h2>
               <ul>
-                <li><a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">API (OpenAPI)</a></li>
+                <li><a href="${API_BASE}/docs" target="_blank" rel="noreferrer">API (OpenAPI)</a></li>
                 <li><a href="https://etherscan.io" target="_blank" rel="noreferrer">Etherscan</a></li>
                 <li><a href="https://basescan.org" target="_blank" rel="noreferrer">Basescan</a></li>
               </ul>

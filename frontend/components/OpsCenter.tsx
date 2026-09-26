@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../lib/api";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentPixel } from "./AgentPixel";
@@ -111,7 +112,7 @@ export function OpsCenter() {
   useEffect(() => {
     let vivo = true;
     const pedir = () => {
-      fetch(`http://localhost:8000/feed/${cadena}?max_blocks=1`)
+      fetch(`${API_BASE}/feed/${cadena}?max_blocks=1`)
         .then(r => (r.ok ? r.json() : Promise.reject()))
         .then((j: Feed) => {
           if (!vivo) return;
@@ -152,7 +153,7 @@ export function OpsCenter() {
   useEffect(() => {
     let vivo = true;
     const pedir = () => {
-      fetch("http://localhost:8000/status")
+      fetch("${API_BASE}/status")
         .then(r => (r.ok ? r.json() : Promise.reject()))
         .then((j: Status) => vivo && setStatus(j))
         .catch(() => undefined);

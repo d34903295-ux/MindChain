@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api";
 import { useState } from "react";
 import { Chip, CopyButton, RiskGauge, Skeleton, Stat, riskTone } from "../../components/ui";
 import { ObsidianExport } from "../../components/ObsidianExport";
@@ -46,7 +47,7 @@ export default function WalletPage() {
     setErr("");
     setRes(null);
     try {
-      const r = await fetch("http://localhost:8000/analyze-wallet", {
+      const r = await fetch(`${API_BASE}/analyze-wallet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: addr.trim(), chain }),
@@ -121,7 +122,7 @@ export default function WalletPage() {
           <div className="result-head">
             <figure className="qr-frame" style={{ margin: 0 }}>
               <img
-                src={`http://localhost:8000/qr/${res.address}`}
+                src={`${API_BASE}/qr/${res.address}`}
                 width={104}
                 height={104}
                 alt={`Código QR de la dirección ${res.address}`}
@@ -139,7 +140,7 @@ export default function WalletPage() {
                 <CopyButton text={res.address} label="dirección" />
                 <a
                   className="btn btn-secondary"
-                  href={`http://localhost:8000/report/${res.address}?chain=${chain}`}
+                  href={`${API_BASE}/report/${res.address}?chain=${chain}`}
                   target="_blank"
                   rel="noreferrer"
                 >

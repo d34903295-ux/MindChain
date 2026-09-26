@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api";
 import { useState } from "react";
 import { Chip, RiskGauge, Skeleton, riskTone } from "../../components/ui";
 import { ObsidianExport } from "../../components/ObsidianExport";
@@ -33,7 +34,7 @@ export default function ContractPage() {
     setErr("");
     setRes(null);
     try {
-      const r = await fetch("http://localhost:8000/analyze-contract", {
+      const r = await fetch(`${API_BASE}/analyze-contract`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: addr.trim(), chain }),
@@ -108,7 +109,7 @@ export default function ContractPage() {
           <div className="result-head">
             <figure className="qr-frame" style={{ margin: 0 }}>
               <img
-                src={`http://localhost:8000/qr/${res.address}`}
+                src={`${API_BASE}/qr/${res.address}`}
                 width={104}
                 height={104}
                 alt={`Código QR de la dirección ${res.address}`}

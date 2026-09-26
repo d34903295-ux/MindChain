@@ -116,3 +116,37 @@ Ojo con dos cosas que ya vale:
 - La API es local por diseño. Si se expone en la red, el CORS deja de ser
   comodín (`CHAINMIND_CORS_ORIGINS`) y `/status` y `/anomaly/latest` exigen
   `X-API-Key`. No revertir eso a `*` sin revisar el análisis de seguridad.
+
+## Skills y comandos (ECC) — usarlos siempre
+
+Este proyecto tiene las 56 skills y los 100 comandos de ECC en dos sitios:
+
+- **Global**: `~/.config/opencode/skills` y `.../commands` (instalados con el
+  perfil `developer`, **sin hooks**). Disponibles en cualquier proyecto.
+- **De proyecto**: `.opencode/skills` y `.opencode/commands` (copia sincronizada,
+  1,19 MB). Para que el repo sea autosuficiente.
+
+En una sesión nueva de este proyecto **están disponibles** y esta sección dice
+cuándo usarlas. No hace falta activarlas a mano.
+
+| Situación | Skill / comando |
+|---|---|
+| Antes de decir que algo funciona | `verification-loop`, o los `python scripts/verificar_*.py` |
+| Arreglo de un bug | `tdd-workflow`: test que falla primero, luego el arreglo |
+| Auditar antes de tocar código | `security-audit` |
+| Revisar código o preparar un commit | `code-review`, `pre-commit` |
+| Cambios grandes o multiples | `plan-canvas`, `dev-team`, `intent-driven-development` |
+| Tareas mecánicas en paralelo | `bmad`, `dispatch-parallel` |
+| Documentacion que se queda vieja | `living-docs-governance` |
+| Prompt o skill nueva | `skill-scout` antes de crearla |
+| Anti-regresion de codigo de IA | `ai-regression-testing` |
+
+Refrescar la copia de proyecto tras actualizar ECC:
+
+```bash
+cp -r ~/.config/opencode/skills .opencode/ && cp -r ~/.config/opencode/commands .opencode/
+```
+
+Nota: los hooks siguen desactivados a proposito (ejecutan codigo en cada
+sesion). Si los quieres, `node ~/.config/opencode/ecc/scripts/ecc.js install
+--profile developer --target opencode --enable-hooks`.

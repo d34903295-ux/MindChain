@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../lib/api";
 import { useCallback, useEffect, useState } from "react";
 
 type Status = {
@@ -24,7 +25,7 @@ export function ObsidianExport({ address, chain, kind, riskScore }: Props) {
   const [ok, setOk] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8000/obsidian/status")
+    fetch("${API_BASE}/obsidian/status")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(setSt)
       .catch(() => setSt(null));
@@ -35,7 +36,7 @@ export function ObsidianExport({ address, chain, kind, riskScore }: Props) {
     setMsg("");
     try {
       const endpoint = kind === "wallet" ? "/obsidian/sync/wallet" : "/obsidian/sync/contract";
-      const r = await fetch(`http://localhost:8000${endpoint}`, {
+      const r = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address, chain }),

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { GlyphField } from "../components/GlyphField";
 import { OpsCenter } from "../components/OpsCenter";

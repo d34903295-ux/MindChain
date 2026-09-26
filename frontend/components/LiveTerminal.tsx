@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../lib/api";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -45,7 +46,7 @@ export function LiveTerminal() {
     let alive = true;
     let id: ReturnType<typeof setInterval> | undefined;
     const tick = () => {
-      fetch("http://localhost:8000/feed/ethereum?max_blocks=1")
+      fetch("${API_BASE}/feed/ethereum?max_blocks=1")
         .then(r => (r.ok ? r.json() : Promise.reject()))
         .then(j => {
           if (!alive) return;

@@ -184,3 +184,66 @@ en `.gitignore` y guarda solo el hash SHA-256.
 `docker-compose up` levanta Postgres+Neo4j+backend+indexer y el indexer escribe bloques recientes a Postgres/Neo4j.
 
 > Sin Docker en esta máquina: el scaffold está listo para `docker compose config` + `up` en dev.
+
+## Desplegar la web en Netlify
+
+La web es Next.js 14 (App Router) y se despliega con el runtime de Netlify, no
+como exportación estática, para que `npm run start` siga funcionando igual en
+local. La configuración está en `netlify.toml` (raíz del repo).
+
+| | |
+|---|---|
+| Base del build | raíz del repo, `frontend/` |
+| Directorio base | `frontend` |
+| Comando de build | `npm run build` |
+| Directorio publicado | `frontend/.next` |
+| Versión de Node | 20 (la fija `netlify.toml`) |
+| Plugin | `@netlify/plugin-nextjs` |
+
+### Antes de publicar: la variable de entorno
+
+**La web sola no hace nada**: toda la información viene de la API de ChainMind.
+Sin `NEXT_PUBLIC_API_URL` la página carga y todas las consultas fallan, porque
+el navegador pediría a su propio `localhost`.
+
+En Netlify: **Site settings → Environment variables → `NEXT_PUBLIC_API_URL`**,
+con la URL pública de tu backend. Ojo con la barra final: el código la recorta,
+pero mejor sin ella.
+
+> La API de este proyecto está pensada para **127.0.0.1**. Publicarla en
+> Internet significa exponerla: el bind por defecto es local y, si se cambia a
+> `0.0.0.0`, la clave de API deja de ser opcional (ver la sección de seguridad
+> de `AGENTS.md`). Un despliegue público necesita un backend accesible y
+> protegido, no el `localhost` de tu máquina.
+
+### Lo que se corrigió para que desplegara
+
+- **17 URLs de la API estaban escritas a pelo** (`http://localhost:8000`) en 6
+  ficheros. Ahora salen de `frontend/lib/api.ts`, que lee
+  `NEXT_PUBLIC_API_URL` y cae a `localhost:8000` en local. Sin esto, la web
+  desplegada no habría podido hablar con ninguna API.
+- **El build estaba roto desde cero.** `app/page.tsx` importaba componentes con
+  `useState` sin declarar `"use client"`, así que Next los trataba como Server
+  Components. Los `npm run build` de antes pasaban, pero por el caché de
+  `.next`: Netlify compila limpio y habría fallado. Las cuatro directivas
+  `"use client"` están restauradas.
+
+## Skills y comandos (ECC)
+
+Hay 56 skills y 100 comandos de [ECC](https://github.com/affaan-m/ECC)
+instalados, en dos sitios:
+
+- **Global** — `~/.config/opencode/skills` y `~/.config/opencode/commands`.
+  Disponibles en cualquier proyecto. Perfil `developer`, **sin hooks**.
+- **De este proyecto** — `.opencode/skills` y `.opencode/commands`, copia
+  sincronizada para que el repo sea autosuficiente.
+
+En cualquier sesión nueva de este proyecto ya están disponibles; `AGENTS.md`
+tiene la tabla de cuál usar en cada situación (verificar, corregir un bug,
+auditar seguridad, revisar código, documentación…). Lo habitual aquí:
+
+```bash
+python -m pytest agents/tests backend/tests -q   # antes de decir que funciona
+python scripts/verificar_bases.py                 # estado real de las bases
+node ~/.config/opencode/ecc/scripts/ecc.js doctor # estado de ECC
+```

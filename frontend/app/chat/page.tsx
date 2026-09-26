@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api";
 import { useEffect, useRef, useState } from "react";
 import ChatDatos from "../../components/ChatGrafico";
 
@@ -49,7 +50,7 @@ export default function ChatPage() {
         .filter(m => m.rol === "user" || m.rol === "bot")
         .slice(-6)
         .map(m => ({ role: m.rol === "user" ? "user" : "assistant", content: m.texto }));
-      const r = await fetch("http://localhost:8000/chat", {
+      const r = await fetch("${API_BASE}/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mensaje: pregunta, historial }),

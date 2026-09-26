@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Skeleton } from "../../components/ui";
 
@@ -95,7 +96,7 @@ export default function WatchPage() {
   const [wlMsg, setWlMsg] = useState("");
 
   const loadWatchlist = useCallback(() => {
-    fetch("http://localhost:8000/watchlist")
+    fetch(`${API_BASE}/watchlist`)
       .then(r => (r.ok ? r.json() : Promise.reject()))
       .then(j => setWatchlist(j.addresses ?? []))
       .catch(() => undefined);
@@ -106,7 +107,7 @@ export default function WatchPage() {
   }, [loadWatchlist]);
 
   const loadStatus = useCallback(() => {
-    fetch("http://localhost:8000/status")
+    fetch(`${API_BASE}/status`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((j) => {
         setSentinel(j.sentinel ?? null);
@@ -125,7 +126,7 @@ export default function WatchPage() {
       try {
         const since = reset ? null : sinceRef.current;
         const q = since ? `?since=${since}&max_blocks=3` : `?max_blocks=2`;
-        const r = await fetch(`http://localhost:8000/feed/${chain}${q}`);
+        const r = await fetch(`${API_BASE}/feed/${chain}${q}`);
         if (r.status === 429) {
           // el guard nos frena: no es un fallo, solo hay que esperar
           setBusy(true);
@@ -259,7 +260,7 @@ export default function WatchPage() {
           onSubmit={async e => {
             e.preventDefault();
             setWlMsg("");
-            const r = await fetch("http://localhost:8000/watchlist", {
+            const r = await fetch(`${API_BASE}/watchlist`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ address: wlAddr.trim(), label: wlLabel.trim() || "watchlist" }),
@@ -318,7 +319,7 @@ export default function WatchPage() {
                   className="btn-ghost"
                   aria-label={`Dejar de vigilar ${w.address}`}
                   onClick={async () => {
-                    await fetch(`http://localhost:8000/watchlist/${w.address}`, { method: "DELETE" });
+                    await fetch(`${API_BASE}/watchlist/${w.address}`, { method: "DELETE" });
                     loadWatchlist();
                   }}
                 >
