@@ -1,249 +1,304 @@
-# ChainMind — Blockchain Intelligence Multi-Agent System
-Fase 0: Setup monorepo + Postgres + Neo4j + Indexer Subsquid EVM
+# ChainMind — centro de inteligencia on-chain
 
-## Estructura
-- `/frontend` — Next.js + React + TS + Tailwind + shadcn/ui
-- `/backend` — FastAPI (Python)
-- `/agents` — LangGraph (Wallet Intelligence, Risk, Explanation)
-- `/indexer` — Subsquid EVM template (Ethereum mainnet)
-- `/db/postgres/init.sql` — users, wallets, reports, raw_transactions
-- `/db/neo4j/init.cypher` — Wallet, Contract, Transaction
+Analiza wallets y contratos de Ethereum y Base con datos **reales** leídos de
+la cadena, calcula un score de riesgo explicable y expone todo por API y por
+web. La IA redacta; **los datos y los números los calcula el código**.
 
-## Quickstart
-1. Copiar env: `cp .env.example .env` y rellenar `ETH_RPC_URL`
-2. Levantar stack: `docker compose up --build` — **no funciona en EC2**, ver más abajo
-3. Backend: http://localhost:8000/docs — `GET /health`, `POST /analyze-wallet`
-4. Neo4j browser: http://localhost:7474 — user/pass de `.env`
-5. Indexer: plantilla Subsquid EVM, ver `/indexer/README.md` (hoy no escribe nada)
+Todo corre en local: el modelo es [Ollama](https://ollama.com), sin claves de
+nube y sin sacar datos de tu máquina.
 
-## Postgres y Neo4j sin Docker (Windows Server en EC2)
+> **Estado honesto**: el análisis on-chain, la API, la web, el chat con gráficos
+> y las dos bases de datos funcionan hoy y están probados. El **indexer de
+> Subsquid no escribe nada** y la relación `TRANSACTED_WITH` no existe. Está
+> detallado más abajo, en [Lo que todavía no funciona](#lo-que-todavía-no-funciona).
 
-`docker compose up` **no se puede usar en esta máquina**: es Windows Server 2022
-sobre una instancia EC2, sin gestor de paquetes y sin virtualización anidada, y
-Docker Desktop no soporta Windows Server. WSL2 y Hyper-V necesitan virtualización
-anidada, que una instancia ya virtualizada no ofrece; habilitarlas además
-exigiría reiniciar el host.
+---
 
-Las dos bases van instaladas de forma nativa, con los mismos usuarios y
-contraseña que usa `docker-compose.yml`, así que los valores por defecto de
-`backend/app/db/` funcionan sin configurar nada:
+## Qué sabe hacer
+
+| | |
+|---|---|
+| **Wallet** | Perfil, score 0-100 con los factores que lo componen, volumen, contrapartes, antigüedad |
+| **Contrato** | Bytecode, permisos, proxy, verificación en Blockscout |
+| **Chat** | Preguntas en lenguaje llano con **9 herramientas** y **gráficos**: «qué wallet se movió más», resumen de la cadena, comparación entre wallets |
+| **Vigilancia** | Centinela que recorre bloques en background y avisa de anomalías |
+| **Persistencia** | PostgreSQL (wallets, reports) y Neo4j (grafo de transacciones) |
+
+El chat es lo que más sorprende: escanea bloques de verdad, cuenta los
+movimientos por dirección y responde con la más activa, su serie por bloque y
+un ranking.
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" \
+  -d '{"mensaje":"que wallet se movio mas en los ultimos 3 bloques"}'
+```
+
+---
+
+## Empezar desde cero
+
+### 1. Requisitos
+
+| | Versión | Nota |
+|---|---|---|
+| Python | 3.11+ | con `pip` |
+| Node.js | 20 | para la web |
+| [Ollama](https://ollama.com) | — | opcional: sin él, la IA es texto determinista |
+| PostgreSQL | 16 | opcional: sin él, el análisis sigue, solo no se guarda |
+| Neo4j | 5.x | opcional: idem, y necesita Java 17+ |
+
+Las tres últimas son **opcionales**: la app está hecha para degradar sin
+romperse. Sin base de datos responde igual y lo dice en el campo `persistence`
+de la respuesta.
+
+### 2. Dependencias de Python
+
+```bash
+python -m pip install -r backend/requirements.txt
+python -m pip install "psycopg[binary]==3.1.*" "neo4j==5.22.*" "python-dotenv==1.0.*"
+```
+
+La segunda línea **no está en `requirements.txt` a propósito**: son los drivers
+de las bases, y sin ellos el import falla antes incluso de intentar conectar.
+Si ves `ModuleNotFoundError: psycopg` en el log, es esto.
+
+### 3. Variables de entorno
+
+```bash
+cp .env.example .env        # Windows: copy .env.example .env
+```
+
+Mínimo para que funcione sin claves:
+
+```env
+ETH_RPC_URL=https://eth.llamarpc.com
+BASE_RPC_URL=https://base.llamarpc.com
+```
+
+Sin `ETH_RPC_URL` el sistema usa Blockchair/Blockscout, que no necesitan clave
+pero van más lento y se caen más.
+
+### 4. Modelo local (opcional pero recomendado)
+
+```bash
+ollama pull qwen2.5:7b
+```
+
+`phi4-mini` también sirve y es 3× más rápido, pero mezcla cifras. El nodo de
+chat usa el modelo grande porque redactar sobre datos sí lo exige; se cambia
+con `CHAINMIND_MODELO_CHAT`.
+
+### 5. Bases de datos (opcionales)
+
+<details>
+<summary><b>PostgreSQL 16 y Neo4j 5 para Windows (lo que hay probado aquí)</b></summary>
 
 ```powershell
-# PostgreSQL 16.10 (servicio postgresql-x64-16, puerto 5432)
+# PostgreSQL: instalar, crear rol y base, y cargar el schema CON ese rol
+# (en PG15+ el schema public no da permisos a quien no es dueño: si lo creas
+#  como otro usuario, luego no ve ninguna tabla)
 & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -h 127.0.0.1 `
-    -c "CREATE ROLE chainmind LOGIN PASSWORD 'chainmind_dev'" -c "CREATE DATABASE chainmind OWNER chainmind"
-# el schema, con el usuario que va a ser dueño de las tablas (si no, en PG15+
-# no ve ninguna: el schema public no da permisos a quien no es dueño)
+    -c "CREATE ROLE chainmind LOGIN PASSWORD 'chainmind_dev'" `
+    -c "CREATE DATABASE chainmind OWNER chainmind"
 Get-Content db\postgres\init.sql -Raw | & "C:\Program Files\PostgreSQL\16\bin\psql.exe" `
     -U chainmind -h 127.0.0.1 -d chainmind
 
-# Neo4j 5.26.0 community (servicio Neo4j, puertos 7687 y 7474)
-# necesita Java 21 en el PATH: el zip no lo trae embebido
-$env:JAVA_HOME = "C:\jdk-21.0.12.1+1"
+# Neo4j: la contraseña se fija ANTES del primer arranque
+$env:JAVA_HOME = "C:\jdk-21.0.12.1+1"      # Java 17+ en el PATH; el zip no lo trae
 & "C:\neo4j-community-5.26.0\bin\neo4j-admin.bat" dbms set-initial-password chainmind_dev
 & "C:\neo4j-community-5.26.0\bin\neo4j.bat" windows-service install
 Start-Service Neo4j
 Get-Content db\neo4j\init.cypher -Raw | & "C:\neo4j-community-5.26.0\bin\cypher-shell.bat" `
     -u neo4j -p chainmind_dev
-
-# drivers, que estan en requirements.txt pero no vienen con el interprete
-python -m pip install "psycopg[binary]==3.1.*" "neo4j==5.22.*" "python-dotenv==1.0.*"
 ```
 
-Comprobar el estado real de ambas (no el `ok` que dice la API):
+Credenciales por defecto: `chainmind` / `chainmind_dev`. Son las que espera el
+código, por eso no hace falta configurar nada más.
+
+Sobre Docker: `docker-compose.yml` existe y es válido, pero **no funciona en
+Windows Server sobre EC2** (Docker Desktop no lo soporta, y WSL2/Hyper-V
+necesitan virtualización anidada, que una instancia ya virtualizada no da).
+Por eso aquí van instaladas de forma nativa.
+
+</details>
+
+### 6. Arrancar
 
 ```bash
-python scripts/verificar_bases.py
+# API  → http://localhost:8000  (docs en /docs)
+scripts\start-backend.bat
+
+# Web → http://localhost:3000
+scripts\start-frontend.bat
 ```
 
-Dos avisos que ya están comprobados:
+En Linux/macOS, los mismos comandos sin la extensión: `bash scripts/start-backend.sh`.
+El script de la web compila antes de arrancar si no hay build, así que la
+primera vez tarda.
 
-- `MATCH (:Wallet)-[r:TRANSACTED_WITH]->(:Wallet)` devuelve **0 siempre**: ese
-  tipo de relación no existe, solo se escriben `SENT` y `TO`
-  (`backend/app/db/neo4j_driver.py:26`). Neo4j avisa con
+### 7. Comprobar que funciona
+
+```bash
+curl http://127.0.0.1:8000/health          # {"status":"ok"}
+```
+
+Y una consulta de verdad, que devuelve la wallet más activa del último bloque
+con su serie:
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" \
+  -d '{"mensaje":"que wallet se movio mas en los ultimos 3 bloques"}'
+```
+
+---
+
+## Verificar que algo está roto
+
+Este proyecto tiene verificadores propios, porque hay fallos que no rompen la
+página: rompen el dibujo. Antes de decir que algo funciona:
+
+```bash
+python -m pytest agents/tests backend/tests -q   # 325 tests
+python scripts/verificar_bases.py                # estado REAL de ambas bases
+python scripts/verificar_sprites.py              # los sprites pixel-art
+python scripts/verificar_balance_usd.py          # el balance no se pierde
+cd frontend && npm run build                     # build limpio (borra .next antes)
+```
+
+`verificar_bases.py` no se fía de lo que dice la API: cuenta filas y nodos
+directamente. La respuesta del endpoint incluye un campo `persistence` con el
+resultado de cada escritura:
+
+```json
+"persistence": {
+  "postgres": "ok",
+  "neo4j": "failed: ServiceUnavailable: Could not perform discovery. No routing servers are available."
+}
+```
+
+Eso es lo que evita el fallo más feo de todos: un `200 OK` que no dice que nada
+se guardó.
+
+---
+
+## Lo que todavía no funciona
+
+Está aquí a propósito, para no perder tiempo buscando lo que no está:
+
+- **El indexer no escribe nada.** `indexer/src/main.ts` recorre bloques pero su
+  handler solo hace `ctx.log.info`; no hay `ctx.store.upsert` en ninguna parte,
+  ni migraciones generadas. `raw_transactions` está a 0 aunque la base esté
+  levantada. Es una plantilla de Subsquid, no un indexer.
+- **`TRANSACTED_WITH` no existe.** El grafo solo escribe `SENT` y `TO`
+  (`backend/app/db/neo4j_driver.py:26`). Preguntar por ese tipo de relación
+  devuelve 0 siempre, tenga datos o no; Neo4j avisa con
   `UnknownRelationshipTypeWarning`.
-- `raw_transactions` está a 0 aunque la base esté levantada: el handler del
-  indexer solo hace `ctx.log.info` y no persiste (`indexer/src/main.ts`).
+- **No hay endpoints** de historial, tokens, transfers ni listados de contratos.
+  Los 28 que existen están en `http://localhost:8000/docs`.
+- **El score se abstiene con muestra pequeña.** Con menos de 8 transacciones devuelve `risk_score: null` y el motivo. Es deliberado: un 0/100 sobre
+  una muestra de 2 transacciones es apariencia de análisis.
 
-## IA
+---
 
-Los agentes de Explanation, Contract e Investigation usan un LLM real. No hace
-falta cuenta: si tienes [Ollama](https://ollama.com) corriendo, ChainMind lo
-detecta y usa un modelo local (gratis, sin clave y sin sacar datos de tu
-máquina):
+## Despliegue en la web: se recomienda local
 
-```bash
-ollama pull qwen2.5:7b    # 7B es el mínimo que responde bien: con 1.5B acusa
-```
+**Netlify no es el sitio adecuado para este proyecto**, y la configuración que
+hay en `frontend/netlify.toml` está solo por si alguien la quiere probar. El
+motivo es de arquitectura, no de Netlify:
 
-Para usar un proveedor en la nube basta con poner su clave en `.env`; ChainMind
-elige el primero disponible en el orden `ollama → anthropic → openai → gemini →
-groq → openrouter`, o el que fuerces con `CHAINMIND_LLM_PROVIDER`.
+1. La web **no tiene datos propios**: todo viene de la API de ChainMind, que
+   está pensada para `127.0.0.1`. En Netlify, el navegador pediría a un
+   backend que hay que publicar, exponer y proteger.
+2. `frontend/lib/api.ts` ya lee `NEXT_PUBLIC_API_URL`, así que la URL es
+   configurable, pero eso no resuelve el punto 1.
+3. El build **antes estaba roto** y solo pasaba por el caché de `.next`; ya
+   está arreglado y compila limpio, pero es un aviso de que la web depende de
+   un backend que casi nunca está levantado.
 
-| Proveedor | Variable | Notas |
-|---|---|---|
-| Ollama (local) | — | Sin clave. Recomendado para datos sensibles |
-| Anthropic | `ANTHROPIC_API_KEY` | Claude |
-| OpenAI | `OPENAI_API_KEY` | GPT |
-| Google | `GEMINI_API_KEY` | Gemini |
-| Groq | `GROQ_API_KEY` | Modelos abiertos, muy rápidos |
-| OpenRouter | `OPENROUTER_API_KEY` | Pasarela a muchos modelos |
-| Compatible OpenAI | `CHAINMIND_LLM_BASE_URL` | vLLM, LM Studio, Together… |
+**Recomendación: ejecútalo en local** con los dos scripts de arriba. Es la
+forma en que está pensado y probado, y la única donde la API, las bases y la
+web están en la misma máquina.
 
-`GET /status` dice qué proveedor está activo, cuánto ha costado y si está
-fallando. Sin proveedor, o si la respuesta del modelo no supera el filtro de
-seguridad, los agentes usan siempre su texto determinista: **una respuesta de
-IA nunca se publica sin validar**. El filtro descarta acusaciones, intenciones
-criminales, invenciones y textos que contradigan el score, y recorta las
-respuestas que hayan quedado cortadas a media frase.
+Si aun así lo pruebas en Netlify: base directory `frontend`, y define
+`NEXT_PUBLIC_API_URL` en *Site settings → Environment variables*.
 
-## Agentes especializados
+---
 
-Cada agente tiene su prompt, su modelo, su temperatura y sus propias reglas.
-Un modelo de 3B rinde mucho mejor con una tarea estrecha que con
-instrucciones genéricas.
+## API
 
-| Agente | Modelo | De qué se ocupa |
-|---|---|---|
-| `explicacion` | phi4-mini | Explica el score de una wallet |
-| `riesgo` | phi4-mini | Justifica una puntuación |
-| `contratos` | llama3.2:3b | Traduce Slither y bytecode |
-| `investigacion` | phi4-mini | Lee el trazado de fondos |
-| `anomalias` | llama3.2:3b | Explica outliers del Isolation Forest |
-| `centinela` | phi4-mini | Redacta la alerta del vigilante |
-| `chat` | phi4-mini | Responde con acceso a todo el sistema |
+28 endpoints, todos en `http://localhost:8000/docs`. Los principales:
 
-Modelos medidos en esta máquina (`python scripts/bench_models.py`):
+| Endpoint | Qué hace |
+|---|---|
+| `POST /analyze-wallet` | Perfil, score, factores y explicación de una wallet |
+| `POST /analyze-contract` | Bytecode, permisos y hallazgos de un contrato |
+| `POST /investigate` | Rastrea por dónde ha pasado el dinero |
+| `POST /chat` | Preguntas en lenguaje llano, con serie temporal y ranking |
+| `GET /feed/{chain}` | Actividad y anomalías de los últimos bloques |
+| `GET /status` | Qué proveedor de IA está activo, cuánto ha costado, estado del centinela |
+| `POST /keys` · `GET /keys` | Claves propias de ChainMind |
 
-| Modelo | Latencia | Filtro |
-|---|---|---|
-| phi4-mini | 3,3 s | siempre pasa |
-| llama3.2:3b | 3,5 s | siempre pasa |
-| qwen2.5:3b | 3,0 s | la mitad descartado |
-| qwen2.5:7b | 7,5 s | siempre pasa |
+### Claves de API
 
-## Chat con acceso al sistema
-
-`POST /chat` pregunta al sistema. No simula: usa los mismos agentes y las
-mismas fuentes que los endpoints, así que los datos que da son los mismos.
-
-```bash
-curl -X POST http://127.0.0.1:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"mensaje":"analiza 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 en base"}'
-```
-
-Entiende: wallets, contratos, rutas de fondos, feed en vivo, estado del
-sistema y watchlist. El enrutado lo hace una tabla de patrones, no el modelo
-(un LLM de 3B no es fiable decidiendo JSON), así que el chat nunca se queda
-colgado: si el modelo falla, responde con el resumen determinista.
-
-## Usarlo desde otras herramientas
-
-Desde la máquina donde corre, genera una clave:
+Desde `localhost` no hace falta clave. Desde fuera, sí:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/keys -H "Content-Type: application/json" \
-  -d '{"nombre":"mi-bot"}'
-```
-
-La clave se muestra **una única vez** (se guarda hasheada) y se usa así:
-
-```bash
+  -d '{"nombre":"mi-bot"}'          # la clave se muestra UNA vez, se guarda hasheada
 curl -H "X-API-Key: cm_..." http://127.0.0.1:8000/analyze-wallet \
   -H "Content-Type: application/json" \
-  -d '{"address":"0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045","chain":"ethereum"}'
+  -d '{"address":"0xd8dA...6045","chain":"ethereum"}'
 ```
 
-- El panel y los scripts de la propia máquina no necesitan clave.
-- Desde fuera (otra IP, contenedor, servicio) sí es obligatoria.
-- `GET /keys` y `DELETE /keys/{nombre}` gestionan las claves, siempre desde
-  localhost.
-- `CHAINMIND_REQUIRE_KEY=1` hace que localhost también pida clave.
-- `CHAINMIND_TRUSTED_HOSTS=proxy,host.docker.internal` declara hosts de
-  confianza (proxy inverso o red de Docker).
+El servidor escucha solo en `127.0.0.1` a propósito. Si lo expones, la clave
+deja de ser opcional: ver la sección de seguridad de `AGENTS.md`.
 
-El servidor escucha solo en `127.0.0.1` a propósito. Para usarlo desde otro
-equipo hay que exponerlo, y al hacerlo la clave deja de ser opcional:
+Las claves de **ChainMind** y las de los **proveedores de IA** son cosas
+distintas: las primeras autorizan a quien llama, las segundos no se devuelven
+por ningún endpoint (hay un test que lo comprueba) y viven en `.env`, que está
+en `.gitignore`.
 
-```powershell
-[Environment]::SetEnvironmentVariable("CHAINMIND_BIND","0.0.0.0","Machine")
-schtasks /run /tn "ChainMindBackend"
-```
+---
 
-Comprobado en la red local: sin clave → `401`, con clave → `200`, con clave
-inventada → `401`. Para volver al modo local: mismo comando con
-`127.0.0.1`.
+## Proveedores de IA
 
-Estas son claves **de ChainMind**, para autorizar a quien llama. Las claves de
-los proveedores de IA (Anthropic, OpenAI…) no se devuelven por ningún
-endpoint: hay un test que lo comprueba. El archivo `data/api_keys.json` está
-en `.gitignore` y guarda solo el hash SHA-256.
+Orden de preferencia: `ollama → anthropic → openai → gemini → groq →
+openrouter`, o fuerza uno con `CHAINMIND_LLM_PROVIDER`.
 
-## Criterio salida Fase 0
-`docker-compose up` levanta Postgres+Neo4j+backend+indexer y el indexer escribe bloques recientes a Postgres/Neo4j.
-
-> Sin Docker en esta máquina: el scaffold está listo para `docker compose config` + `up` en dev.
-
-## Desplegar la web en Netlify
-
-La web es Next.js 14 (App Router) y se despliega con el runtime de Netlify, no
-como exportación estática, para que `npm run start` siga funcionando igual en
-local. La configuración está en `netlify.toml` (raíz del repo).
-
-| | |
+| Proveedor | Variable |
 |---|---|
-| Base del build | raíz del repo, `frontend/` |
-| Directorio base | `frontend` |
-| Comando de build | `npm run build` |
-| Directorio publicado | `frontend/.next` |
-| Versión de Node | 20 (la fija `netlify.toml`) |
-| Plugin | `@netlify/plugin-nextjs` |
+| Ollama (local, sin clave) | — |
+| Anthropic | `ANTHROPIC_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| Google | `GEMINI_API_KEY` |
+| Groq / OpenRouter | `GROQ_API_KEY` / `OPENROUTER_API_KEY` |
+| Compatible con OpenAI | `CHAINMIND_LLM_BASE_URL` |
 
-### Antes de publicar: la variable de entorno
+**Una respuesta de IA nunca se publica sin validar.** Si no hay proveedor, si
+falla, o si el texto no supera el filtro, se devuelve el texto determinista del
+agente. El filtro descarta acusaciones, intenciones criminales, invenciones y textos
+que contradigan el score.
 
-**La web sola no hace nada**: toda la información viene de la API de ChainMind.
-Sin `NEXT_PUBLIC_API_URL` la página carga y todas las consultas fallan, porque
-el navegador pediría a su propio `localhost`.
+---
 
-En Netlify: **Site settings → Environment variables → `NEXT_PUBLIC_API_URL`**,
-con la URL pública de tu backend. Ojo con la barra final: el código la recorta,
-pero mejor sin ella.
+## Estructura
 
-> La API de este proyecto está pensada para **127.0.0.1**. Publicarla en
-> Internet significa exponerla: el bind por defecto es local y, si se cambia a
-> `0.0.0.0`, la clave de API deja de ser opcional (ver la sección de seguridad
-> de `AGENTS.md`). Un despliegue público necesita un backend accesible y
-> protegido, no el `localhost` de tu máquina.
-
-### Lo que se corrigió para que desplegara
-
-- **17 URLs de la API estaban escritas a pelo** (`http://localhost:8000`) en 6
-  ficheros. Ahora salen de `frontend/lib/api.ts`, que lee
-  `NEXT_PUBLIC_API_URL` y cae a `localhost:8000` en local. Sin esto, la web
-  desplegada no habría podido hablar con ninguna API.
-- **El build estaba roto desde cero.** `app/page.tsx` importaba componentes con
-  `useState` sin declarar `"use client"`, así que Next los trataba como Server
-  Components. Los `npm run build` de antes pasaban, pero por el caché de
-  `.next`: Netlify compila limpio y habría fallado. Las cuatro directivas
-  `"use client"` están restauradas.
-
-## Skills y comandos (ECC)
-
-Hay 56 skills y 100 comandos de [ECC](https://github.com/affaan-m/ECC)
-instalados, en dos sitios:
-
-- **Global** — `~/.config/opencode/skills` y `~/.config/opencode/commands`.
-  Disponibles en cualquier proyecto. Perfil `developer`, **sin hooks**.
-- **De este proyecto** — `.opencode/skills` y `.opencode/commands`, copia
-  sincronizada para que el repo sea autosuficiente.
-
-En cualquier sesión nueva de este proyecto ya están disponibles; `AGENTS.md`
-tiene la tabla de cuál usar en cada situación (verificar, corregir un bug,
-auditar seguridad, revisar código, documentación…). Lo habitual aquí:
-
-```bash
-python -m pytest agents/tests backend/tests -q   # antes de decir que funciona
-python scripts/verificar_bases.py                 # estado real de las bases
-node ~/.config/opencode/ecc/scripts/ecc.js doctor # estado de ECC
 ```
+/frontend   Next.js 14 (App Router) + React + TS + Tailwind
+/backend    FastAPI (Python)
+/agents     la lógica: perfil, riesgo, contratos, anomalías, chat, watcher
+/indexer    plantilla de Subsquid EVM (hoy no escribe nada)
+/db         init.sql de Postgres e init.cypher de Neo4j
+/scripts    verificadores ejecutables
+/docs, /jobs, /AGENTS.md
+```
+
+`AGENTS.md` es el documento para quien trabaje en el código con una IA: reglas
+del proyecto, qué verificar antes de dar algo por bueno, cómo está montado el
+chat y qué avisos hay.
+
+---
+
+## Licencia
+
+MIT.

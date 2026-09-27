@@ -19,3 +19,8 @@ api_keys.json
 
 # artefactos de compilacion de TypeScript
 *.tsbuildinfo
+
+
+# skills/comandos de ECC: viven en ~/.config/opencode y se cargan solos.
+# La copia local se conserva pero no se versiona (1,19 MB de terceros).
+.opencode/

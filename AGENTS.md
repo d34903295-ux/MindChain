@@ -119,15 +119,15 @@ Ojo con dos cosas que ya vale:
 
 ## Skills y comandos (ECC) — usarlos siempre
 
-Este proyecto tiene las 56 skills y los 100 comandos de ECC en dos sitios:
+Las 56 skills y los 100 comandos de ECC están instalados **globalmente** en
+`~/.config/opencode/skills` y `~/.config/opencode/commands` (perfil
+`developer`, **sin hooks**). Se cargan solos en cualquier proyecto, así que en
+una sesión nueva de este repositorio ya están disponibles y esta sección dice
+cuándo usarlas: no hay que activarlas a mano ni registrarlas en el repo.
 
-- **Global**: `~/.config/opencode/skills` y `.../commands` (instalados con el
-  perfil `developer`, **sin hooks**). Disponibles en cualquier proyecto.
-- **De proyecto**: `.opencode/skills` y `.opencode/commands` (copia sincronizada,
-  1,19 MB). Para que el repo sea autosuficiente.
-
-En una sesión nueva de este proyecto **están disponibles** y esta sección dice
-cuándo usarlas. No hace falta activarlas a mano.
+Hay una copia en `.opencode/` dentro de la carpeta de trabajo para trabajar
+offline, pero está en `.gitignore` a propósito: son 1,19 MB de ficheros de
+terceros que se desactualizan, y el repositorio no debe depender de ellos.
 
 | Situación | Skill / comando |
 |---|---|
@@ -141,7 +141,7 @@ cuándo usarlas. No hace falta activarlas a mano.
 | Prompt o skill nueva | `skill-scout` antes de crearla |
 | Anti-regresion de codigo de IA | `ai-regression-testing` |
 
-Refrescar la copia de proyecto tras actualizar ECC:
+Refrescar la copia local tras actualizar ECC:
 
 ```bash
 cp -r ~/.config/opencode/skills .opencode/ && cp -r ~/.config/opencode/commands .opencode/
